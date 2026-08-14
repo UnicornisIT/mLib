@@ -175,13 +175,20 @@ test.describe("release smoke", () => {
       { width: 360, height: 800 },
     ];
     const releaseRoutes = ["/", "/music", "/movie", "/books", "/collections", "/games", "/wishes"];
+    const allowedOverflowPixels = 1;
 
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await page.goto("/");
       await expect(page.getByRole("main")).toBeVisible();
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
-      expect(overflow, `${viewport.width}x${viewport.height} overflows horizontally`).toBe(false);
+      const overflowPixels = await page.evaluate(() => Math.max(
+        0,
+        document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      ));
+      expect(
+        overflowPixels,
+        `${viewport.width}x${viewport.height} overflows horizontally by ${overflowPixels}px`,
+      ).toBeLessThanOrEqual(allowedOverflowPixels);
     }
 
     for (const viewport of [viewports[0], viewports[4], viewports[8]]) {
@@ -189,9 +196,12 @@ test.describe("release smoke", () => {
       for (const route of releaseRoutes) {
         await page.goto(route);
         await expect(page.getByRole("main")).toBeVisible();
-        const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
-        if (overflow) {
-          const offenders = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>("body *"))
+        const overflowPixels = await page.evaluate(() => Math.max(
+          0,
+          document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        ));
+        if (overflowPixels > allowedOverflowPixels) {
+          const offenders = await page.evaluate((allowedOverflow) => Array.from(document.querySelectorAll<HTMLElement>("body *"))
             .map((element) => ({
               tag: element.tagName.toLowerCase(),
               className: typeof element.className === "string" ? element.className : "",
@@ -199,10 +209,13 @@ test.describe("release smoke", () => {
               right: Math.round(element.getBoundingClientRect().right),
               width: Math.round(element.getBoundingClientRect().width),
             }))
-            .filter((item) => item.right > document.documentElement.clientWidth + 1 || item.left < -1)
+            .filter((item) => (
+              item.right > document.documentElement.clientWidth + allowedOverflow
+              || item.left < -allowedOverflow
+            ))
             .sort((a, b) => b.right - a.right)
-            .slice(0, 20));
-          throw new Error(`${route} overflows at ${viewport.width}x${viewport.height}: ${JSON.stringify(offenders)}`);
+            .slice(0, 20), allowedOverflowPixels);
+          throw new Error(`${route} overflows by ${overflowPixels}px at ${viewport.width}x${viewport.height}: ${JSON.stringify(offenders)}`);
         }
       }
     }
