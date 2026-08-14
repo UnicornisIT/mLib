@@ -1,224 +1,209 @@
 # mLib
 
-> **Статус:** подготовка первого публичного релиза `0.1.0`. Репозиторий ещё не публикуется автоматически.
+> **Статус:** release candidate `0.1.0`. Проект готовится к первому публичному релизу.
 
-mLib — локальная self-hosted медиаплатформа для музыки, фильмов и сериалов, книг, физических коллекций, игр и желаний. Наиболее проработанный домен — музыка: загрузка собственных файлов, автоматическое чтение тегов и обложек, каталог, поиск, потоковое воспроизведение, очередь, избранное и плейлисты.
+mLib — self-hosted пространство для личных медиатек и коллекций. В одном интерфейсе собраны музыка, фильмы и сериалы, книги, физические предметы, игры и список желаний. Данные и файлы остаются на вашем компьютере или сервере.
 
-Проект рассчитан на запуск на обычном ПК, в локальной сети и на VPS. Backend остаётся источником истины; frontend не знает физических путей к файлам.
+Главная страница показывает доступность каждого сервиса и ведёт в шесть независимых модулей:
 
-## Что уже работает
+| Модуль | Назначение |
+|---|---|
+| `musicLib` | Музыкальная библиотека, потоковый плеер, очередь, избранное и плейлисты |
+| `movieLib` | Каталог фильмов и сериалов, списки просмотра, эпизоды, локальные видео и статистика |
+| `bookLib` | Электронные и аудиокниги с обложками и встроенным прослушиванием |
+| `collectLib` | Учёт физических предметов, фотографий, мест хранения, тегов и собственных полей |
+| `gameLib` | Игротека с платформами, статусами, временем, оценками и достижениями |
+| `wishLib` | Общая очередь «посмотреть / прочитать / послушать / купить» с автосопоставлением |
+
+Наиболее зрелый модуль сейчас — `musicLib`; остальные сервисы находятся на стадии функционального MVP.
+
+## Что нового в текущей версии
+
+- единый стартовый экран mLib со статусом всех доменных сервисов;
+- общий профиль: отображаемое имя, описание, местоположение, дата рождения и цвет аватара;
+- безопасная смена пароля с проверкой текущего пароля, отзывом старых сессий и временной блокировкой после повторных ошибок;
+- очередь музыкальных треков с неполными метаданными, объяснением проблем и ручной отметкой «проверено»;
+- расширенный `movieLib`: TMDB-каталог, поиск по названию, актёру и режиссёру, съёмочная группа и фильмографии;
+- статусы фильмов и сериалов, отметки эпизодов и сезонов, годовая статистика и игра «Что посмотреть сегодня?»;
+- возобновляемая по смещению загрузка больших видео частями, определение `S01E03` из имени файла и сохранение позиции просмотра;
+- полноценные `bookLib`, `collectLib`, `gameLib` и `wishLib` с отдельными интерфейсами и API;
+- автоматическое закрытие желания, когда соответствующий фильм, книга, альбом, игра или предмет появляется в библиотеке;
+- семь независимых SQLite/PostgreSQL-баз и инструмент переноса из старой монолитной `mlib.db`;
+- адаптивный интерфейс, сервисная навигация и тёмная, светлая или системная тема.
+
+## Возможности
+
+### Общая платформа
 
 - первоначальная настройка и создание администратора;
-- вход, выход, Argon2-хеширование паролей и защищённая HttpOnly cookie-сессия;
-- загрузка одного или нескольких файлов, Drag & Drop и прогресс по каждому файлу;
+- вход и выход через подписанную HttpOnly cookie-сессию;
+- Argon2-хеширование паролей и минимальная длина нового пароля 15 символов;
+- единый профиль во всех сервисах;
+- проверка доступности каждой доменной базы;
+- адаптивный desktop/tablet/mobile UI;
+- SQLite для простого локального запуска и PostgreSQL для серверной установки;
+- автоматические Alembic-миграции при старте Docker-контейнера.
+
+### musicLib
+
+- загрузка нескольких файлов, Drag & Drop и отдельный прогресс каждого файла;
 - MP3, FLAC, M4A, AAC, OGG, WAV и OPUS;
 - импорт разрешённой серверной папки с прогрессом, повторным сканированием и пропуском известных файлов;
-- SHA-256 + размер файла для защиты от дублей;
-- нормализация ID3, FLAC/Vorbis и MP4-тегов через Mutagen, технические данные через Mutagen/ffprobe;
-- извлечение embedded artwork и заранее созданные WebP-версии 512, 256 и 64 px;
-- автоматическое разрешение исполнителей и альбомов без дублей регистра/пробелов;
-- `Album Artist`, `Various Artists`, номер диска и сортировка multi-disc альбомов;
-- пагинированные треки, альбомы, исполнители, жанры, поиск и главная страница;
-- HTTP Range Requests (`206 Partial Content`) без загрузки файла целиком в память;
-- постоянный плеер, очередь, Next/Previous, Shuffle, Repeat One/All, громкость и mute;
-- пользовательские избранное и плейлисты, изменение порядка треков;
-- редактирование тегов в БД и безопасное удаление физического файла;
-- `movieLib`: каталог фильмов и сериалов, TMDB-поиск, локальные видеофайлы, прогресс просмотра, сезоны и эпизоды;
-- `bookLib`: электронные и аудиокниги, обложки, загрузка файлов и чтение/выдача содержимого с авторизацией;
-- `collectLib`: универсальные коллекции физических предметов с карточками, несколькими фотографиями и выбором обложки;
-- настраиваемые поля коллекций, теги, местоположение предмета, поиск, фильтры и массовые операции;
-- `gameLib`: игры, платформы, статусы прохождения, часы, оценки и достижения;
-- `wishLib`: общая очередь желаний, приоритеты и отметки об автоматическом выполнении;
-- тёмная, светлая и системная темы; адаптивный desktop/tablet/mobile UI;
-- SQLite для локального запуска и PostgreSQL без изменения бизнес-логики;
-- Alembic, Docker Compose, Nginx-конфигурация и automated tests.
+- защита от дублей по SHA-256 и размеру;
+- чтение ID3, FLAC/Vorbis и MP4-тегов через Mutagen, технических параметров — через Mutagen/ffprobe;
+- извлечение встроенной обложки и подготовка WebP-версий 512, 256 и 64 px;
+- нормализация исполнителей и альбомов без дублей регистра и пробелов;
+- `Album Artist`, `Various Artists`, номера дисков и корректная сортировка multi-disc альбомов;
+- каталоги треков, альбомов, исполнителей и жанров, глобальный поиск и пагинация;
+- очередь проверки метаданных: отсутствующие название, исполнитель, альбом, жанр или год;
+- редактирование тегов в базе, ручная отметка проверенного трека и безопасное удаление файла;
+- HTTP Range streaming (`206 Partial Content`) без чтения всего файла в память;
+- постоянный плеер с очередью, Next/Previous, Shuffle, Repeat One/All, громкостью и mute;
+- сохранение очереди и настроек плеера на текущем устройстве;
+- пользовательские избранное и плейлисты, описание плейлиста и изменение порядка треков;
+- статистика прослушиваний, недавно добавленные и недавно воспроизведённые треки.
 
-## Архитектура
+### movieLib
 
-```text
-mLib
-├── backend/                      FastAPI, SQLAlchemy, Alembic
-│   ├── app/core/                 конфигурация, безопасность
-│   ├── app/auth/                 пользователи и сессии
-│   ├── app/database/             engine, session, metadata
-│   ├── app/settings/             настройки приложения
-│   ├── app/storage/              файловое хранилище
-│   └── app/modules/              независимые домены
-│       ├── music/                музыка, метаданные, artwork и streaming
-│       ├── movie/                фильмы, сериалы и прогресс просмотра
-│       ├── books/                книги, обложки и файлы
-│       ├── collections/          коллекции, поля и фотографии
-│       ├── games/                игры и прогресс прохождения
-│       └── wishes/               желания и автоматическое сопоставление
-├── frontend/                     Next.js, React, TypeScript, Tailwind
-│   └── src/
-│       ├── app/                  маршруты интерфейса
-│       ├── components/           плеер, таблицы, навигация, upload
-│       ├── providers/            auth, theme, global player state
-│       ├── hooks/                синхронизация библиотеки
-│       └── lib/                  API-клиент, типы, форматирование
-└── deploy/                       reverse proxy
-```
+- актуальный каталог TMDB с поиском, фильтрами и сортировкой по популярности, рейтингу или дате;
+- поиск по названию, актёру и режиссёру, карточки участников съёмочной группы и фильмографии;
+- списки фильмов: «Буду смотреть» и «Посмотрел»;
+- списки сериалов: «Смотрю», «Буду смотреть», «Посмотрел» и «Перестал»;
+- сезоны и эпизоды, отметка отдельного эпизода или всего сезона;
+- профиль просмотра: итоги, активность за 12 месяцев и распределение по статусам;
+- рекомендации «Продолжить просмотр» и даты ближайших эпизодов;
+- игра выбора на вечер из двух фильмов или сериалов с сохранением результата в списки;
+- загрузка видео частями, привязка к карточке и автоматическое распознавание сезона/эпизода из имени;
+- анализ видео и аудиокодеков через ffprobe, защита от дублей и Range streaming;
+- встроенный видеоплеер с восстановлением позиции и автоматической отметкой завершения;
+- настраиваемый период обновления метаданных.
 
-Core не содержит понятий `Track`, `Artist` или `Album`. Музыка, фильмы, книги, коллекции, игры и желания реализованы соседними доменами в `app/modules` и `src/app`, используя общие auth/settings/storage.
+Для каталога, постеров, описаний, эпизодов и фильмографий нужен TMDB API Read Access Token. Его можно задать через `TMDB_API_TOKEN` или настройки `movieLib`. Локальные видео и ручные карточки продолжают работать без токена.
 
-Тяжёлые операции — hashing, Mutagen, ffprobe, обработка изображений и импорт — выполняются вне основного async event loop FastAPI. Текущий реестр задач импорта изолирован так, чтобы позднее заменить его durable worker без изменения REST-контракта.
+### bookLib
 
-## Схема данных
+- электронные книги: EPUB, PDF, FB2, MOBI, AZW3, DJVU и TXT;
+- аудиокниги: MP3, M4B, M4A, AAC, OGG, OPUS, FLAC и WAV;
+- ручные метаданные: автор, жанр, язык, год, издатель, ISBN, рассказчик и число страниц;
+- собственная обложка с преобразованием в WebP;
+- поиск по названию, автору и жанру, фильтр типа и сортировка;
+- скачивание электронной книги и встроенное прослушивание аудиокниги с Range Requests;
+- защита от повторной загрузки одинакового файла и статистика занятого места.
 
-```mermaid
-erDiagram
-    USER ||--o{ FAVORITE : marks
-    USER ||--o{ PLAYLIST : owns
-    ARTIST ||--o{ TRACK : performs
-    ARTIST ||--o{ ALBUM : album_artist
-    ALBUM ||--o{ TRACK : contains
-    ARTWORK ||--o{ TRACK : illustrates
-    ARTWORK ||--o{ ALBUM : illustrates
-    PLAYLIST ||--o{ PLAYLIST_TRACK : orders
-    TRACK ||--o{ PLAYLIST_TRACK : included
-    TRACK ||--o{ FAVORITE : favorited
+### collectLib
 
-    TRACK {
-      uuid id PK
-      string title
-      uuid artist_id FK
-      uuid album_id FK
-      string file_hash UK
-      string file_path
-      float duration
-      int disc_number
-      int track_number
-      int play_count
-    }
-    ALBUM {
-      uuid id PK
-      string normalized_title
-      string normalized_album_artist
-      uuid artwork_id FK
-    }
-    ARTIST {
-      uuid id PK
-      string name
-      string normalized_name UK
-    }
-    PLAYLIST_TRACK {
-      uuid id PK
-      uuid playlist_id FK
-      uuid track_id FK
-      int position
-    }
-```
+- несколько именованных коллекций со своим цветом и описанием;
+- карточки предметов, количество, описание и точное место хранения;
+- до 20 фотографий за загрузку, полноразмерные WebP-версии и миниатюры, выбор основной фотографии;
+- цветные теги, поиск и фильтры по коллекции, месту и тегу;
+- настраиваемые поля типов: текст, длинный текст, число, дата, флаг, список, URL, цена и рейтинг;
+- обязательные поля, порядок полей и выбор данных для показа на карточке;
+- массовое перемещение, смена места хранения, добавление/удаление тега и удаление предметов;
+- изоляция коллекций и предметов между пользователями на уровне API.
 
-Физические файлы лежат независимо от отображаемых тегов:
+### gameLib
 
-```text
-media/music/
-├── originals/<uuid-prefix>/<track-uuid>.<ext>
-├── artwork/<uuid-prefix>/<artwork-uuid>-{original,512,256,64}.webp
-└── staging/
-```
+- платформы PC, PlayStation, Xbox, Switch и Retro;
+- статусы «Не начато», «Играю», «Пройдено», «100%» и «Заброшено»;
+- разработчик, издатель, жанр, год, дата и источник покупки;
+- время в игре, личная оценка и прогресс достижений;
+- обложка и до 12 ссылок на скриншоты;
+- поиск, фильтры по платформе и статусу, сортировка по названию, году, оценке или времени;
+- сводка по библиотеке, прохождению, времени и достижениям.
 
-## REST API
+### wishLib
 
-Полная интерактивная документация доступна на `http://localhost:8000/docs` при локальном запуске backend.
+- категории «Посмотреть», «Прочитать», «Послушать» и «Купить»;
+- фильмы, сериалы, книги, альбомы, игры, предметы или произвольные желания;
+- автор/исполнитель/бренд, заметка, ссылка на источник и ссылка на изображение;
+- подсказки TMDB при добавлении фильма или сериала;
+- активная очередь и история выполненных желаний;
+- ручное выполнение и возврат желания в очередь;
+- автоматическое точное сопоставление нормализованного названия с `movieLib`, `bookLib`, `musicLib`, `gameLib` и `collectLib`;
+- ссылка из выполненного желания на найденный объект без дублирования состояния других трекеров.
 
-| Область | Endpoints |
-|---|---|
-| Auth | `GET /api/auth/status`, `POST /setup`, `POST /login`, `POST /logout`, `GET /me` |
-| Tracks | `GET /api/music/tracks`, `GET/PATCH/DELETE /tracks/{id}` |
-| Playback | `GET /tracks/{id}/stream`, `POST /tracks/{id}/played` |
-| Favorites | `POST/DELETE /tracks/{id}/favorite` |
-| Artwork | `GET /api/music/artwork/{id}/{size}` |
-| Upload/import | `POST /api/music/upload`, `POST /imports`, `GET /imports/{job_id}` |
-| Books | `GET/POST /api/books`, `GET /books/dashboard`, `GET /books/{id}/cover`, `GET/DELETE /books/{id}`, `GET /books/{id}/content` |
-| Collections | `GET/POST/PATCH/DELETE /api/collections`, `/collections/items`, `/collections/{id}/fields`, `/collections/items/bulk`, `/collections/items/{id}/photos` |
-| Movies/TV | `/api/movie/dashboard`, `/titles`, `/catalog`, `/uploads`, `/files/{id}/stream`, tracking и episodes |
-| Games | `GET/POST /api/games`, `GET /games/dashboard`, `GET/PATCH/DELETE /games/{id}` |
-| Wishes | `GET/POST /api/wishes`, `GET /wishes/dashboard`, `GET/PATCH/DELETE /wishes/{id}` |
-| Catalog | `GET /albums`, `/albums/{id}`, `/artists`, `/artists/{id}`, `/genres`, `/dashboard` |
-| Search | `GET /api/music/search?q=...` |
-| Playlists | `GET/POST /playlists`, `GET/PATCH/DELETE /playlists/{id}` |
-| Playlist tracks | `POST /playlists/{id}/tracks`, `DELETE /tracks/{item_id}`, `PUT /tracks/reorder` |
-| Settings | `GET/PATCH /api/settings` |
-| System | `GET /health` |
-
-Списки имеют пагинацию и ограниченный `page_size`; поля частого поиска и сортировки индексированы.
-
-## Самый простой запуск через Docker
+## Быстрый запуск через Docker
 
 Нужны Docker Engine и Docker Compose v2.
 
-1. Скопируйте `.env.example` в `.env`.
-2. Замените `SECRET_KEY` уникальным случайным значением длиной не менее 32 символов. Пример генерации: `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
-3. При необходимости задайте `MUSIC_IMPORT_PATH` — папку хоста с уже существующей музыкой.
-4. Запустите:
+1. Скопируйте пример конфигурации:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   В PowerShell используйте `Copy-Item .env.example .env`.
+
+2. Замените `SECRET_KEY` уникальным случайным значением длиной не менее 32 символов:
+
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(48))"
+   ```
+
+3. При необходимости задайте `MUSIC_IMPORT_PATH` — папку хоста с уже существующей музыкой. Для `movieLib` можно добавить `TMDB_API_TOKEN`.
+
+4. Запустите приложение:
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+5. Откройте [http://localhost:3000](http://localhost:3000) и создайте администратора.
+
+В Docker разрешённая папка музыкального импорта доступна приложению как `/imports`. SQLite-базы и медиаданные хранятся в persistent volume `mlib_data`, поэтому обычная пересборка контейнеров их не удаляет.
+
+Проверить состояние можно командой:
 
 ```bash
-docker compose up -d --build
+docker compose ps
 ```
 
-Откройте `http://localhost:3000`. На первом экране создайте администратора. В Docker разрешённая папка импорта — `/imports`.
+Backend считается готовым после успешного ответа `/health`.
 
-SQLite и медиаданные находятся в persistent volume `mlib_data`; пересборка контейнеров их не удаляет.
+## PostgreSQL
 
-Проверить состояние контейнеров можно командой `docker compose ps`; backend считается готовым после успешной проверки `/health`.
-
-## Обновление и резервное копирование
-
-Перед обновлением остановите запись новых данных и сохраните persistent volume. Для SQLite достаточно архивировать содержимое `mlib_data` (базы в `/data/db` и медиаданные в `/data/media`). Для PostgreSQL дополнительно сделайте `pg_dump` всех баз `mlib_*`. После резервного копирования получите новую версию проекта и выполните:
+Укажите сильный `POSTGRES_PASSWORD` в `.env`, затем запустите основной Compose-файл вместе с PostgreSQL overlay:
 
 ```bash
-docker compose pull
-docker compose up -d --build
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
 ```
 
-Миграции выполняются автоматически при старте backend. Никогда не используйте `docker compose down -v` при обычном обновлении: ключ `-v` удаляет пользовательские данные.
+Контейнер PostgreSQL создаёт семь баз `mlib_*`, а backend автоматически применяет к ним миграции. Для внешнего сервера задайте отдельный URL каждого домена, например:
 
-## Локальный запуск для разработки
+```text
+CORE_DATABASE_URL=postgresql+psycopg://mlib:password@database:5432/mlib_core
+```
 
-Требования: Python 3.12+, Node.js 22+, pnpm 11+, FFmpeg/ffprobe.
+## Локальная разработка
 
-Backend:
+Требования: Python 3.12+, Node.js 22+, pnpm 11+ и FFmpeg/ffprobe.
+
+### Backend
 
 ```bash
 python -m venv .venv
-# Windows: .venv\Scripts\activate
+# PowerShell: .\.venv\Scripts\Activate.ps1
 # Linux/macOS: source .venv/bin/activate
-pip install -r backend/requirements-dev.txt
+python -m pip install -r backend/requirements-dev.txt
 cp backend/.env.example backend/.env
 cd backend
-alembic -n core upgrade head
-alembic -n music upgrade head
-alembic -n movie upgrade head
-alembic -n books upgrade head
-alembic -n collections upgrade head
-alembic -n games upgrade head
-alembic -n wishes upgrade head
-uvicorn app.main:app --reload
+python -m alembic -n core upgrade head
+python -m alembic -n music upgrade head
+python -m alembic -n movie upgrade head
+python -m alembic -n books upgrade head
+python -m alembic -n collections upgrade head
+python -m alembic -n games upgrade head
+python -m alembic -n wishes upgrade head
+python -m uvicorn app.main:app --reload
 ```
 
-## Независимые базы сервисов
+В PowerShell для копирования конфигурации используйте `Copy-Item backend/.env.example backend/.env`.
 
-mLib использует семь независимых подключений:
+Backend будет доступен на [http://localhost:8000](http://localhost:8000), интерактивная OpenAPI-документация — на [http://localhost:8000/docs](http://localhost:8000/docs).
 
-- `CORE_DATABASE_URL` — пользователи, единый вход и общие параметры размещения;
-- `MUSIC_DATABASE_URL` — musicLib, плейлисты и музыкальные настройки;
-- `MOVIE_DATABASE_URL` — movieLib, видео, прогресс просмотра и настройки TMDB.
-- `BOOKS_DATABASE_URL` — bookLib, электронные и аудиокниги с ручными метаданными и обложками.
-- `COLLECTIONS_DATABASE_URL` — collectLib, коллекции, предметы, фотографии, теги, местоположения и настраиваемые поля.
-- `GAMES_DATABASE_URL` — gameLib, игры, платформы, статусы прохождения, часы, оценки и достижения.
-- `WISHES_DATABASE_URL` — wishLib, общая очередь желаний и отметки об автоматическом выполнении.
+### Frontend
 
-При переходе со старой монолитной `mlib.db` выполните из папки `backend`:
-
-```bash
-python -m scripts.split_database
-```
-
-Команда создаёт датированную резервную копию исходной базы, переносит данные с сохранением UUID и проверяет количество строк во всех доменных таблицах. Исходная `DATABASE_URL` после разделения используется только как адрес старой базы для инструмента переноса.
-
-Frontend в другом терминале:
+В другом терминале:
 
 ```bash
 cd frontend
@@ -228,43 +213,160 @@ pnpm install
 pnpm dev
 ```
 
-Откройте `http://localhost:3000`. Backend и OpenAPI будут на `http://localhost:8000` и `/docs`.
+В PowerShell используйте `Copy-Item .env.example .env.local`. Frontend откроется на [http://localhost:3000](http://localhost:3000).
 
-## PostgreSQL
+Команды `make migrate`, `make test`, `make lint`, `make typecheck`, `make build` и `make e2e` дублируют основные операции для окружений с Make.
 
-Для Docker-варианта задайте сильный `POSTGRES_PASSWORD` в `.env`, затем:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
-```
-
-Alembic автоматически применит те же миграции к PostgreSQL. Для внешнего PostgreSQL задайте отдельный URL для каждого домена (`CORE_DATABASE_URL`, `MUSIC_DATABASE_URL`, `MOVIE_DATABASE_URL`, `BOOKS_DATABASE_URL`, `COLLECTIONS_DATABASE_URL`, `GAMES_DATABASE_URL`, `WISHES_DATABASE_URL`), например:
+## Архитектура
 
 ```text
-CORE_DATABASE_URL=postgresql+psycopg://mlib:password@database:5432/mlib_core
+mLib
+├── backend/                      FastAPI, SQLAlchemy, Alembic
+│   ├── app/auth/                 пользователи, профиль и сессии
+│   ├── app/core/                 конфигурация и безопасность
+│   ├── app/database/             отдельные подключения доменов
+│   ├── app/settings/             общие настройки musicLib
+│   ├── app/storage/              управляемое файловое хранилище
+│   └── app/modules/
+│       ├── music/                музыка, метаданные, artwork и streaming
+│       ├── movie/                фильмы, сериалы, TMDB и прогресс просмотра
+│       ├── books/                электронные и аудиокниги
+│       ├── collections/          физические коллекции и фотографии
+│       ├── games/                игры и прогресс прохождения
+│       └── wishes/               желания и межсервисное сопоставление
+├── frontend/                     Next.js, React, TypeScript, Tailwind CSS
+│   ├── src/app/                  страницы App Router
+│   ├── src/components/           карточки, диалоги, плееры и навигация
+│   ├── src/providers/            auth, theme, feedback и music player
+│   └── e2e/                      Playwright smoke-тесты
+└── deploy/                       PostgreSQL init и Nginx reverse proxy
 ```
 
-## Production и VPS
+Backend остаётся источником истины: frontend не получает физические пути файлов. Каждый домен использует общие auth/config/storage-контракты, но собственные таблицы, миграции и подключение к базе.
 
-1. Укажите production-домен в `CORS_ORIGINS`.
-2. Включите `COOKIE_SECURE=true` и обслуживайте приложение только через HTTPS.
-3. Используйте длинные отдельные значения `SECRET_KEY` и `POSTGRES_PASSWORD`.
-4. Не публикуйте порт backend наружу; доступ к `/api` должен идти через reverse proxy.
-5. Ограничьте права на volume медиатеки и регулярно резервируйте БД и `/data/media`.
-6. Запустите PostgreSQL и профиль Nginx:
+Тяжёлые операции — hashing, Mutagen, ffprobe, обработка изображений и импорт — выполняются вне основного async event loop FastAPI.
+
+## Базы данных и хранение
+
+mLib использует семь независимых подключений:
+
+| Переменная | Содержимое |
+|---|---|
+| `CORE_DATABASE_URL` | Пользователи, профиль, сессии и общие настройки размещения |
+| `MUSIC_DATABASE_URL` | Музыка, избранное, плейлисты и настройки musicLib |
+| `MOVIE_DATABASE_URL` | Фильмы, сериалы, файлы, эпизоды, прогресс и TMDB-настройки |
+| `BOOKS_DATABASE_URL` | Электронные и аудиокниги |
+| `COLLECTIONS_DATABASE_URL` | Коллекции, предметы, поля, теги и фотографии |
+| `GAMES_DATABASE_URL` | Игры, платформы и прогресс прохождения |
+| `WISHES_DATABASE_URL` | Желания и результаты автоматического сопоставления |
+
+`DATABASE_URL` сохранён только как адрес старой монолитной базы для инструмента переноса.
+
+Файлы получают UUID-имена и не зависят от отображаемых названий:
+
+```text
+media/
+├── music/
+│   ├── originals/
+│   ├── artwork/
+│   └── staging/
+├── movie/
+│   ├── originals/
+│   └── staging/
+├── books/
+│   ├── originals/
+│   ├── covers/
+│   └── staging/
+└── collections/
+    ├── photos/
+    └── staging/
+```
+
+### Переход со старой `mlib.db`
+
+Из каталога `backend` выполните:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml --profile proxy up -d --build
+python -m scripts.split_database
 ```
 
-`deploy/nginx.conf` передаёт Range-заголовки, отключает buffering для streaming и принимает загрузки до 1 ГБ. TLS обычно завершается на внешнем Nginx, Caddy, Traefik или у облачного балансировщика; при прямой публикации добавьте сертификаты в этот конфиг.
+Скрипт создаёт датированную резервную копию исходной базы, переносит строки с сохранением UUID и сверяет количество данных в доменных таблицах.
+
+## REST API
+
+Полный и всегда актуальный контракт доступен в Swagger UI по адресу `/docs`. Основные группы:
+
+| Область | Основные endpoints |
+|---|---|
+| Auth и профиль | `/api/auth/status`, `/api/auth/setup`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/me/password` |
+| Состояние | `/health`, `/api/services/status` |
+| Музыка | `/api/music/tracks`, `/api/music/albums`, `/api/music/artists`, `/api/music/genres`, `/api/music/search`, `/api/music/dashboard` |
+| Проверка метаданных | `/api/music/tracks/attention-summary`, `/api/music/tracks/{id}/metadata-reviewed` |
+| Музыкальные файлы | `/api/music/upload`, `/api/music/imports`, `/api/music/tracks/{id}/stream`, `/api/music/artwork/{id}/{size}` |
+| Плейлисты | `/api/music/playlists`, `/api/music/playlists/{id}/tracks`, `/api/music/playlists/{id}/tracks/reorder` |
+| Фильмы и сериалы | `/api/movie/dashboard`, `/api/movie/profile`, `/api/movie/titles`, `/api/movie/catalog`, `/api/movie/people/{id}` |
+| Видео и эпизоды | `/api/movie/uploads`, `/api/movie/files/{id}/stream`, `/api/movie/files/{id}/progress`, `/api/movie/titles/{id}/seasons/{season}` |
+| Книги | `/api/books`, `/api/books/dashboard`, `/api/books/{id}/cover`, `/api/books/{id}/content` |
+| Коллекции | `/api/collections`, `/api/collections/items`, `/api/collections/items/bulk`, `/api/collections/tags`, `/api/collections/{id}/fields`, `/api/collections/items/{id}/photos` |
+| Игры | `/api/games`, `/api/games/dashboard`, `/api/games/{id}` |
+| Желания | `/api/wishes`, `/api/wishes/dashboard`, `/api/wishes/{id}` |
+| Настройки | `/api/settings`, `/api/movie/settings` |
+
+Все пользовательские списки имеют серверные ограничения размера; крупные каталоги используют пагинацию. Медиа, обложки и фотографии выдаются только после авторизации.
+
+## Обновление и резервное копирование
+
+Перед обновлением остановите запись новых данных и сохраните базы вместе с каталогом `media`.
+
+- Для стандартной Docker-установки сохраните содержимое volume `mlib_data`.
+- Для локального SQLite сохраните семь `.db`-файлов и каталог `media`.
+- Для PostgreSQL сделайте `pg_dump` баз `mlib_core`, `mlib_music`, `mlib_movie`, `mlib_books`, `mlib_collections`, `mlib_games` и `mlib_wishes`, затем отдельно сохраните медиафайлы.
+
+После резервного копирования:
+
+```bash
+docker compose pull
+docker compose up -d --build
+```
+
+Миграции выполняются автоматически при старте backend. Не используйте `docker compose down -v` для обычного обновления: ключ `-v` удаляет пользовательские volumes.
+
+## Production и безопасность
+
+Перед публикацией в интернет:
+
+1. Укажите production-домен в `CORS_ORIGINS`.
+2. Включите `COOKIE_SECURE=true` и используйте только HTTPS.
+3. Задайте уникальные длинные `SECRET_KEY` и `POSTGRES_PASSWORD`.
+4. Не публикуйте порт backend напрямую; направляйте `/api` через reverse proxy.
+5. Ограничьте права на volume медиатеки и настройте регулярные резервные копии.
+6. Для встроенного Nginx-профиля запустите:
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.postgres.yml --profile proxy up -d --build
+   ```
+
+`deploy/nginx.conf` передаёт Range-заголовки, отключает buffering для streaming и принимает загрузки до 1 ГБ. TLS обычно завершается на внешнем Nginx, Caddy, Traefik или облачном балансировщике.
+
+В приложении также реализованы следующие меры:
+
+- пользовательские имена не участвуют в конечных путях файлов;
+- музыкальные форматы проверяются по whitelist, содержимое — через Mutagen;
+- видео анализируется ffprobe, изображения декодируются Pillow;
+- загрузки ограничены по размеру и никогда не исполняются;
+- пути папочного импорта ограничены настроенным корнем и проверяются после `resolve()`;
+- пароли и секреты не логируются, production-запуск с шаблонным `SECRET_KEY` блокируется;
+- смена пароля отзывает ранее выпущенные сессии;
+- streaming читает файлы небольшими блоками.
+
+Порядок приватного сообщения об уязвимостях описан в [SECURITY.md](SECURITY.md).
 
 ## Проверки
 
 ```bash
 cd backend
 python -m pytest
-ruff check app tests
+python -m ruff check app tests
 
 cd ../frontend
 pnpm typecheck
@@ -274,37 +376,26 @@ pnpm test:e2e:install
 pnpm test:e2e
 ```
 
-Тесты покрывают metadata normalization, duplicate detection, Range Requests, порядок плейлиста, CRUD и authentication.
+Backend-тесты покрывают auth и профиль, миграции, изоляцию баз, нормализацию метаданных, защиту от дублей, Range Requests, плейлисты и CRUD всех доменов. Playwright smoke-тесты проходят основные пользовательские сценарии.
 
-E2E использует только временные базы и медиахранилище в `frontend/.e2e`; рабочие базы и пользовательские файлы не изменяются.
+E2E использует только временные базы и медиахранилище в `frontend/.e2e`; рабочие данные не изменяются.
 
-## Безопасность
+## Ограничения MVP
 
-- пользовательские имена файлов не участвуют в конечном пути;
-- расширения проверяются по whitelist, а Mutagen подтверждает, что содержимое является аудио;
-- upload ограничен по размеру и никогда не исполняется;
-- все media/artwork endpoints требуют авторизацию;
-- пути импорта ограничены настроенным корнем, а управляемые пути проверяются после `resolve()`;
-- пароли хешируются Argon2, секреты не логируются;
-- CORS, secure cookie и лимиты загрузки настраиваются окружением;
-- streaming читает файл небольшими блоками.
-
-## Следующие этапы и ограничения MVP
-
-- MusicBrainz и Cover Art Archive представлены контрактом `MetadataProvider`, но сетевые провайдеры пока не подключены; встроенные теги не перезаписываются.
-- Server-side transcoding ещё не реализован: воспроизведение формата зависит от поддержки браузера. FFmpeg уже входит в Docker-образ и используется для технического анализа.
-- Задачи импорта хранят состояние в памяти процесса. После перезапуска сам каталог остаётся в БД, но история активной задачи теряется; следующий шаг — durable worker.
-- Нет ReplayGain, lyrics, waveform, gapless/crossfade, offline PWA, Chromecast/AirPlay/DLNA и scrobbling.
-- Модель готова к нескольким пользователям (избранное и плейлисты принадлежат пользователю), но UI управления пользователями пока отсутствует.
-- Реализованы независимые домены Music, Movies/TV, Books, Collections, Games и Wishes; их данные и медиахранилища не смешиваются.
-- Для следующего этапа collectLib оставлены учёт выданных предметов, расширенная статистика и импорт CSV.
-
-Ключевые решения: UUID-пути защищают хранилище от переименований; SQLite/PostgreSQL разделены конфигурацией, а не бизнес-логикой; «Все треки» — индексированный запрос, а не дублирующий системный плейлист; artwork готовится при импорте, а не при каждом HTTP-запросе; внешние метаданные могут только заполнить отсутствующие поля.
+- MusicBrainz и Cover Art Archive представлены контрактом `MetadataProvider`, но сетевые провайдеры ещё не подключены; встроенные теги не перезаписываются.
+- Server-side transcoding не реализован: воспроизведение аудио и видео зависит от поддержки кодека браузером. FFmpeg уже используется для технического анализа.
+- Состояние музыкального импорта хранится в памяти процесса. После перезапуска каталог остаётся в базе, но история активной задачи теряется.
+- Пока нет ReplayGain, lyrics, waveform, gapless/crossfade, offline PWA, Chromecast/AirPlay/DLNA и scrobbling.
+- Модель поддерживает пользовательские данные, но UI создания и администрирования дополнительных пользователей ещё отсутствует.
+- `bookLib` пока не ведёт прогресс чтения и прослушивания.
+- `gameLib` заполняется вручную; обложки и скриншоты задаются ссылками.
+- В `collectLib` ещё нет учёта выданных предметов, расширенной статистики и импорта CSV.
+- TMDB необходим для внешнего каталога `movieLib`; без токена доступны локальные карточки, файлы и трекинг.
 
 ## Участие в разработке
 
-Порядок локального запуска, тестов и подготовки pull request описан в [CONTRIBUTING.md](CONTRIBUTING.md). Уязвимости следует сообщать приватно по инструкции из [SECURITY.md](SECURITY.md), не публикуя секреты или персональные данные в issue.
+Порядок подготовки изменений и pull request описан в [CONTRIBUTING.md](CONTRIBUTING.md). Заметные изменения фиксируются в [CHANGELOG.md](CHANGELOG.md).
 
 ## Лицензия
 
-Проект распространяется по лицензии [MIT](LICENSE). Разрешены использование, копирование, изменение и распространение при сохранении уведомления об авторских правах и текста лицензии.
+Проект распространяется по лицензии [MIT](LICENSE).
