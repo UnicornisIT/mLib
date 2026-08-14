@@ -1,0 +1,22 @@
+name: Предложение функции
+description: Идея пользовательского улучшения mLib
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую проблему это решает?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Предлагаемое поведение
+      description: Опишите сценарий с точки зрения пользователя.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Альтернативы и дополнительный контекст

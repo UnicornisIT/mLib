@@ -1,0 +1,1 @@
+"""Universal physical collections domain."""

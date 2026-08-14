@@ -1,0 +1,40 @@
+name: Сообщение об ошибке
+description: Воспроизводимая проблема в mLib
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Не публикуйте токены, пароли, приватные пути и пользовательские медиа. Уязвимости сообщайте по SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Версия mLib
+      placeholder: 0.1.0 или commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Способ установки
+      options: [Docker Compose с SQLite, Docker Compose с PostgreSQL, Локальная разработка]
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги воспроизведения
+      placeholder: "1. Открыть…\n2. Нажать…\n3. Увидеть…"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ожидаемое и фактическое поведение
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Дополнительный контекст
+      description: Браузер, ОС и безопасный фрагмент лога без секретов.
