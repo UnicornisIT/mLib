@@ -41,9 +41,12 @@ def _engine(url: str) -> Engine:
     if url.startswith("sqlite"):
 
         @event.listens_for(engine, "connect")
-        def enable_sqlite_foreign_keys(dbapi_connection: object, _: object) -> None:
+        def configure_sqlite_connection(dbapi_connection: object, _: object) -> None:
             cursor = dbapi_connection.cursor()  # type: ignore[attr-defined]
             cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA busy_timeout=10000")
             cursor.close()
 
     return engine
@@ -101,3 +104,19 @@ def get_games_db() -> Generator[Session, None, None]:
 
 def get_wishes_db() -> Generator[Session, None, None]:
     yield from _session(WishesSessionLocal)
+
+
+ALL_ENGINES = (
+    core_engine,
+    music_engine,
+    movie_engine,
+    books_engine,
+    collections_engine,
+    games_engine,
+    wishes_engine,
+)
+
+
+def dispose_all_engines() -> None:
+    for engine in ALL_ENGINES:
+        engine.dispose()

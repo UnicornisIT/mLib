@@ -3,6 +3,7 @@ import "./globals.css";
 import "./wishes/wishes.css";
 import "./module-system.css";
 import { AppShell } from "@/components/AppShell";
+import { DesktopUpdateBanner } from "@/components/DesktopUpdateBanner";
 import { Providers } from "@/providers/Providers";
 
 export const metadata: Metadata = {
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <Providers>
           <AppShell>{children}</AppShell>
+          <DesktopUpdateBanner />
         </Providers>
       </body>
     </html>

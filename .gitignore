@@ -30,10 +30,22 @@ frontend/.next/
 frontend/node_modules/
 frontend/out/
 frontend/.pnpm-store/
+.pnpm-store/
+.corepack/
+.pnpm-home/
+.npm-cache/
 frontend/playwright-report/
 frontend/test-results/
 frontend/blob-report/
 frontend/.e2e/
+desktop/node_modules/
+desktop/build/backend/
+desktop/build/frontend/
+desktop/build/pyinstaller/
+desktop/build/smoke-*/
+desktop/build/icon.ico
+desktop/build/icon.png
+dist/
 *.tsbuildinfo
 
 # Logs, caches, editors and operating systems

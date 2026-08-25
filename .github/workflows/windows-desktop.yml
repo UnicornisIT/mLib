@@ -1,0 +1,104 @@
+name: Windows Desktop
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-desktop.txt
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Verify release version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $packageVersion = (Get-Content -LiteralPath "desktop/package.json" -Raw | ConvertFrom-Json).version
+          $expectedTag = "v$packageVersion"
+          $actualTag = "${{ github.ref_name }}"
+          if ($actualTag -ne $expectedTag) {
+            throw "Release tag '$actualTag' must match desktop/package.json version '$expectedTag'."
+          }
+      - name: Build installer
+        shell: pwsh
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          MLIB_GITHUB_REPOSITORY: ${{ github.repository }}
+        run: .\scripts\build-windows.ps1
+      - name: Upload installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: mLib-windows-x64
+          path: |
+            dist/mLib-Setup-*-x64.exe
+            dist/mLib-Setup-*-x64.exe.sha256
+            dist/mLib-Setup-*-x64.exe.blockmap
+            dist/latest.yml
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $installer = Get-ChildItem -LiteralPath "dist" -Filter "mLib-Setup-*-x64.exe" |
+            Select-Object -First 1
+          if (-not $installer) {
+            throw "Windows installer was not found in dist."
+          }
+
+          $checksum = Get-Item -LiteralPath "$($installer.FullName).sha256"
+          $blockmap = Get-Item -LiteralPath "$($installer.FullName).blockmap"
+          $updateManifest = Get-Item -LiteralPath "dist/latest.yml"
+          $releaseExists = gh release list --limit 1000 --json tagName |
+            ConvertFrom-Json |
+            Where-Object { $_.tagName -eq $tag }
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not read GitHub Releases."
+          }
+
+          if ($releaseExists) {
+            gh release upload $tag $installer.FullName $checksum.FullName `
+              $blockmap.FullName $updateManifest.FullName --clobber
+          } else {
+            $releaseArguments = @(
+              $tag,
+              $installer.FullName,
+              $checksum.FullName,
+              $blockmap.FullName,
+              $updateManifest.FullName,
+              "--title", "mLib $tag",
+              "--verify-tag"
+            )
+            $releaseNotes = ".github/release-notes/$tag.md"
+            if (Test-Path -LiteralPath $releaseNotes) {
+              $releaseArguments += @("--notes-file", $releaseNotes)
+            } else {
+              $releaseArguments += "--generate-notes"
+            }
+            if ($tag.Contains("-")) {
+              $releaseArguments += "--prerelease"
+            }
+            gh release create @releaseArguments
+          }
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub Release publication failed."
+          }

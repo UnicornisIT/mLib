@@ -2,7 +2,7 @@
 
 import { FileVideo2, UploadCloud, X } from "lucide-react";
 import { ChangeEvent, DragEvent, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, apiUrl } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import type { MovieUpload } from "@/lib/types";
 
@@ -20,7 +20,7 @@ async function uploadInChunks(file: File, titleId: string | undefined, onProgres
   });
   while (upload.offset < file.size) {
     const end = Math.min(upload.offset + upload.chunk_size, file.size);
-    const response = await fetch(`/api/movie/uploads/${upload.id}`, {
+    const response = await fetch(apiUrl(`/movie/uploads/${upload.id}`), {
       method: "PATCH",
       credentials: "include",
       headers: {

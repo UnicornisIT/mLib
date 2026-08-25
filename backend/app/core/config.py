@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "mLib"
-    app_version: str = "0.1.0"
+    app_version: str = "0.0.1-alpha"
+    app_mode: Literal["desktop", "server"] = "server"
     environment: Literal["development", "test", "production"] = "development"
     api_prefix: str = "/api"
     secret_key: str = "change-me-before-production"
@@ -28,6 +29,11 @@ class Settings(BaseSettings):
     games_database_url: str = "sqlite:///./games.db"
     wishes_database_url: str = "sqlite:///./wishes.db"
     media_root: Path = Path("./media")
+    data_root: Path = Path("./data")
+    backups_root: Path = Path("./backups")
+    temp_root: Path = Path("./temp")
+    log_file: Path | None = None
+    desktop_token: str | None = None
     import_root: Path | None = None
     cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["http://localhost:3000"])
     max_upload_mb: int = 1024
@@ -104,6 +110,10 @@ class Settings(BaseSettings):
     @property
     def collections_staging_dir(self) -> Path:
         return self.media_root / "collections" / "staging"
+
+    @property
+    def is_desktop(self) -> bool:
+        return self.app_mode == "desktop"
 
 
 @lru_cache

@@ -14,6 +14,11 @@ export class ApiError extends Error {
   }
 }
 
+export function apiUrl(path: string): string {
+  const desktopBase = typeof window !== "undefined" ? window.mlibDesktop?.apiBase : undefined;
+  return `${desktopBase ?? "/api"}${path}`;
+}
+
 function validationIssueMessage(issue: ValidationIssue): string {
   const message = typeof issue.msg === "string" ? issue.msg.replace(/^Value error,\s*/i, "") : "";
   if (/[А-Яа-яЁё]/.test(message)) return message;
@@ -49,7 +54,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   }
   let response: Response;
   try {
-    response = await fetch(`/api${path}`, {
+    response = await fetch(apiUrl(path), {
       ...options,
       body,
       headers,
@@ -77,25 +82,25 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
 }
 
 export function artworkUrl(id: string | null | undefined, size: 64 | 256 | 512 = 256): string | null {
-  return id ? `/api/music/artwork/${id}/${size}` : null;
+  return id ? apiUrl(`/music/artwork/${id}/${size}`) : null;
 }
 
 export function streamUrl(trackId: string): string {
-  return `/api/music/tracks/${trackId}/stream`;
+  return apiUrl(`/music/tracks/${trackId}/stream`);
 }
 
 export function movieStreamUrl(fileId: string): string {
-  return `/api/movie/files/${fileId}/stream`;
+  return apiUrl(`/movie/files/${fileId}/stream`);
 }
 
 export function bookCoverUrl(bookId: string): string {
-  return `/api/books/${bookId}/cover`;
+  return apiUrl(`/books/${bookId}/cover`);
 }
 
 export function bookContentUrl(bookId: string): string {
-  return `/api/books/${bookId}/content`;
+  return apiUrl(`/books/${bookId}/content`);
 }
 
 export function collectionPhotoUrl(photoId: string, size: "thumb" | "full" = "thumb"): string {
-  return `/api/collections/photos/${photoId}/${size}`;
+  return apiUrl(`/collections/photos/${photoId}/${size}`);
 }

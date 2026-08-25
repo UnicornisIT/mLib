@@ -165,6 +165,10 @@ a { color: inherit; text-decoration: none; }
 .hub-profile-modules strong, .hub-profile-modules small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hub-profile-modules strong { font-size: 13px; }
 .hub-profile-modules small { color: var(--muted); font-size: 10px; }
+.hub-profile-backup { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; margin-top: 18px; padding: 17px; border: 1px solid var(--border); border-radius: 15px; background: var(--surface); }
+.hub-profile-backup-icon { width: 42px; height: 42px; display: grid; place-items: center; color: var(--accent); border-radius: 12px; background: var(--surface-2); }
+.hub-profile-backup h2 { margin: 0; font-size: 15px; letter-spacing: -.02em; }
+.hub-profile-backup-actions { display: flex; align-items: center; gap: 8px; }
 .service-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .service-card { position: relative; min-height: 450px; display: flex; flex-direction: column; overflow: hidden; padding: clamp(24px, 3.5vw, 38px); border: 1px solid var(--border); border-radius: 28px; transition: transform .2s ease, box-shadow .2s ease; isolation: isolate; }
 .service-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
@@ -516,6 +520,35 @@ a { color: inherit; text-decoration: none; }
 .system-list { display: grid; gap: 0; }
 .system-row { display: flex; justify-content: space-between; padding: 13px 0; border-top: 1px solid var(--border); font-size: 13px; }
 .system-row span { color: var(--muted); }
+.data-settings-intro { display: flex; align-items: flex-start; gap: 14px; }
+.data-settings-intro > svg, .about-card > svg { flex: 0 0 auto; color: var(--accent); }
+.data-settings-intro > div { min-width: 0; }
+.data-settings-intro h2, .data-settings-intro p { margin-left: 0; }
+.data-action-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; }
+.data-action-icon { width: 40px; height: 40px; display: grid; place-items: center; color: var(--accent); border-radius: 12px; background: var(--accent-soft); }
+.data-action-copy { min-width: 0; }
+.data-action-copy h2 { margin: 0 0 4px; font-size: 15px; }
+.data-action-copy p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.data-action-card .button { white-space: nowrap; }
+.about-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; }
+.about-card .system-list, .about-card .form-actions { grid-column: 1 / -1; }
+.about-card .desktop-update-settings { grid-column: 1 / -1; }
+.about-card > div > h2 { margin: 4px 0 6px; font-size: 28px; }
+.about-card > div > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.desktop-update-settings { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 13px; background: var(--surface-2); }
+.desktop-update-settings > div { min-width: 0; display: grid; gap: 4px; }
+.desktop-update-settings > div > strong { font-size: 13px; }
+.desktop-update-settings > div > span { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.desktop-update-settings .button { flex: 0 0 auto; }
+.desktop-update-banner { position: fixed; z-index: 1180; right: 22px; bottom: 86px; width: min(560px, calc(100vw - 32px)); display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 14px; color: var(--text); border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border)); border-radius: 16px; background: color-mix(in srgb, var(--surface) 95%, transparent); box-shadow: 0 22px 65px rgb(0 0 0 / 32%); backdrop-filter: blur(18px); }
+.desktop-update-icon { width: 40px; height: 40px; display: grid; place-items: center; color: var(--accent); border-radius: 12px; background: var(--accent-soft); }
+.desktop-update-copy { min-width: 0; display: grid; gap: 4px; }
+.desktop-update-copy strong { font-size: 13px; }
+.desktop-update-copy span { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.desktop-update-progress { height: 3px; overflow: hidden; margin-top: 3px; border-radius: 99px; background: var(--border); }
+.desktop-update-progress i { height: 100%; display: block; border-radius: inherit; background: var(--accent); transition: width .2s ease; }
+.desktop-update-close { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; color: var(--muted); border: 0; border-radius: 9px; background: transparent; cursor: pointer; }
+.desktop-update-close:hover { color: var(--text); background: var(--surface-2); }
 
 .playlist-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; }
 .playlist-sidebar { display: grid; align-content: start; gap: 6px; }
@@ -728,6 +761,8 @@ a { color: inherit; text-decoration: none; }
   .hub-profile-actions { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; }
   .hub-profile-avatar { width: 58px; height: 58px; font-size: 21px; }
   .hub-profile-modules { grid-template-columns: 1fr; }
+  .hub-profile-backup { grid-template-columns: auto minmax(0, 1fr); }
+  .hub-profile-backup-actions { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; }
   .service-grid { grid-template-columns: 1fr; }
   .service-card { min-height: 390px; border-radius: 22px; }
   .service-card-copy { width: 92%; }
@@ -1393,3 +1428,4 @@ a { color: inherit; text-decoration: none; }
 .toast > span { font-size: 13px; line-height: 1.4; }.toast > button { display: grid; place-items: center; padding: 5px; color: var(--muted); border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
 .feedback-dialog { width: min(470px, 100%); }.feedback-message { margin: 0 0 18px; color: var(--muted); line-height: 1.6; white-space: pre-line; }
 @media (max-width: 600px) { .toast-region { right: 16px; top: 16px; }.feedback-backdrop { align-items: flex-end; padding: 0; }.feedback-dialog { width: 100%; border-radius: 20px 20px 0 0; } }
+@media (max-width: 720px) { .data-action-card { grid-template-columns: auto minmax(0, 1fr); }.data-action-card .button { grid-column: 1 / -1; justify-self: stretch; }.desktop-update-settings { align-items: stretch; flex-direction: column; }.desktop-update-settings .button { justify-content: center; }.desktop-update-banner { right: 16px; bottom: 16px; grid-template-columns: auto minmax(0, 1fr) auto; }.desktop-update-banner > .button { grid-column: 2 / -1; justify-content: center; }.desktop-update-close { grid-column: 3; grid-row: 1; }.desktop-update-icon { grid-row: 1; } }

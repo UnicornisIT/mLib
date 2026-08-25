@@ -1,12 +1,16 @@
 import logging
+import secrets
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
+from typing import Annotated
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.auth.api import router as auth_router
 from app.core.config import get_settings
+from app.data_transfer.api import router as data_transfer_router
 from app.database.session import (
     BooksSessionLocal,
     CollectionsSessionLocal,
@@ -15,6 +19,7 @@ from app.database.session import (
     MovieSessionLocal,
     MusicSessionLocal,
     WishesSessionLocal,
+    dispose_all_engines,
 )
 from app.modules.books.api import router as books_router
 from app.modules.collections.api import router as collections_router
@@ -27,10 +32,29 @@ from app.settings.models import CoreSetting
 from app.storage.service import LocalMediaStorage
 
 settings = get_settings()
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
+
+
+def configure_logging() -> None:
+    level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+    root = logging.getLogger()
+    root.setLevel(level)
+    if settings.log_file:
+        settings.log_file.parent.mkdir(parents=True, exist_ok=True)
+        handler = RotatingFileHandler(
+            settings.log_file,
+            maxBytes=5 * 1024 * 1024,
+            backupCount=5,
+            encoding="utf-8",
+        )
+        handler.setFormatter(formatter)
+        root.handlers.clear()
+        root.addHandler(handler)
+    elif not root.handlers:
+        logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+
+
+configure_logging()
 
 
 @asynccontextmanager
@@ -45,7 +69,10 @@ async def lifespan(_: FastAPI):
     except Exception:
         logging.getLogger(__name__).info("Application settings are not initialized yet")
     LocalMediaStorage(settings)
-    yield
+    try:
+        yield
+    finally:
+        dispose_all_engines()
 
 
 app = FastAPI(
@@ -66,7 +93,25 @@ app.add_middleware(
 
 @app.get("/health", tags=["system"])
 def health() -> dict[str, str]:
-    return {"status": "ok", "version": settings.app_version}
+    return {"status": "ok", "version": settings.app_version, "mode": settings.app_mode}
+
+
+@app.post("/desktop/shutdown", include_in_schema=False)
+def desktop_shutdown(
+    desktop_token: Annotated[str | None, Header(alias="X-mLib-Desktop-Token")] = None,
+) -> dict[str, str]:
+    """Ask the embedded uvicorn server to exit without exposing shutdown in server mode."""
+    if not settings.is_desktop:
+        raise HTTPException(status_code=404)
+    if not settings.desktop_token or not desktop_token or not secrets.compare_digest(
+        settings.desktop_token, desktop_token
+    ):
+        raise HTTPException(status_code=403)
+    callback = getattr(app.state, "desktop_shutdown", None)
+    if callback is None:
+        raise HTTPException(status_code=503, detail="Desktop lifecycle is not initialized")
+    callback()
+    return {"status": "shutting-down"}
 
 
 def database_status(session_factory) -> str:
@@ -99,3 +144,4 @@ app.include_router(collections_router, prefix=settings.api_prefix)
 app.include_router(games_router, prefix=settings.api_prefix)
 app.include_router(wishes_router, prefix=settings.api_prefix)
 app.include_router(settings_router, prefix=settings.api_prefix)
+app.include_router(data_transfer_router, prefix=settings.api_prefix)

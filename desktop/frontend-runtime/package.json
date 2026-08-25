@@ -1,0 +1,11 @@
+{
+  "name": "mlib-frontend-runtime",
+  "version": "0.0.1-alpha",
+  "private": true,
+  "packageManager": "pnpm@11.16.0",
+  "dependencies": {
+    "next": "16.2.11",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  }
+}

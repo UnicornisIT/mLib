@@ -1,0 +1,105 @@
+{
+  "name": "mlib-desktop",
+  "version": "0.0.1-alpha",
+  "private": true,
+  "description": "mLib Windows desktop shell",
+  "main": "main.cjs",
+  "author": "mLib contributors",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --config electron-builder.config.cjs --win nsis --x64 --publish never",
+    "dist:portable": "electron-builder --config electron-builder.config.cjs --win portable --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.0.0",
+    "electron-builder": "26.15.3",
+    "rcedit": "5.0.2"
+  },
+  "build": {
+    "appId": "app.mlib.desktop",
+    "productName": "mLib",
+    "executableName": "mLib",
+    "artifactName": "mLib-Setup-${version}-${arch}.${ext}",
+    "asar": true,
+    "directories": {
+      "output": "../dist",
+      "buildResources": "build"
+    },
+    "afterPack": "after-pack.cjs",
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "electron-builder.config.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/backend",
+        "to": "backend"
+      },
+      {
+        "from": "build/frontend",
+        "to": "frontend",
+        "filter": [
+          "**/*",
+          "!node_modules{,/**/*}"
+        ]
+      },
+      {
+        "from": "build/frontend/node_modules",
+        "to": "frontend/node_modules",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "build/tools",
+        "to": "tools",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "signtoolOptions": {
+        "signingHashAlgorithms": [
+          "sha256"
+        ],
+        "rfc3161TimeStampServer": "http://timestamp.digicert.com"
+      },
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "mLib",
+      "uninstallDisplayName": "mLib",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    }
+  },
+  "allowScripts": {
+    "electron@44.0.0": true,
+    "electron-winstaller@5.4.0": true
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
+  }
+}

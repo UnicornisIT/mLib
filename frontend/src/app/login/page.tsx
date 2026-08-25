@@ -1,7 +1,7 @@
 "use client";
 
 import { AudioLines } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/providers/AuthProvider";
 
 export default function LoginPage() {
@@ -12,6 +12,12 @@ export default function LoginPage() {
   const [importPath, setImportPath] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => {
+    // Desktop capability is injected by Electron after server-side rendering.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDesktop(Boolean(window.mlibDesktop));
+  }, []);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
@@ -30,8 +36,8 @@ export default function LoginPage() {
         await setup({
           username: normalizedUsername,
           password,
-          library_path: libraryPath.trim() || undefined,
-          import_path: importPath.trim() || undefined,
+          library_path: desktop ? undefined : libraryPath.trim() || undefined,
+          import_path: desktop ? undefined : importPath.trim() || undefined,
         });
       } else await login(normalizedUsername, password);
     } catch (caught) {
@@ -51,7 +57,7 @@ export default function LoginPage() {
           <p>{setupRequired ? "Один администратор и один вход для musicLib, movieLib и будущих сервисов." : "Все ваши личные медиатеки доступны через один безопасный вход."}</p>
           <div className="field"><label htmlFor="auth-username">Имя пользователя</label><input id="auth-username" className="input" autoComplete="username" autoCapitalize="none" spellCheck={false} minLength={3} maxLength={80} required value={username} onChange={(event) => setUsername(event.target.value)} /></div>
           <div className="field"><label htmlFor="auth-password">Пароль</label><input id="auth-password" className="input" type="password" autoComplete={setupRequired ? "new-password" : "current-password"} minLength={setupRequired ? 15 : 1} maxLength={200} required value={password} onChange={(event) => setPassword(event.target.value)} aria-describedby={setupRequired ? "auth-password-hint" : undefined} />{setupRequired && <small id="auth-password-hint" style={{ color: "var(--muted)" }}>Не менее 15 символов; можно использовать длинную фразу.</small>}</div>
-          {setupRequired && (
+          {setupRequired && !desktop && (
             <>
               <div className="field"><label htmlFor="auth-library-path">Путь к медиатеке (необязательно)</label><input id="auth-library-path" className="input" value={libraryPath} onChange={(event) => setLibraryPath(event.target.value)} placeholder="По умолчанию: ./media" /></div>
               <div className="field"><label htmlFor="auth-import-path">Разрешённая папка импорта (необязательно)</label><input id="auth-import-path" className="input" value={importPath} onChange={(event) => setImportPath(event.target.value)} placeholder="Например: /data/music" /></div>
