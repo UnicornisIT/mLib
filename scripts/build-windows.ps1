@@ -36,6 +36,10 @@ if ($env:MLIB_PYTHON) {
 Write-Host "[1/7] Installing backend dependencies and preparing application icon"
 & $python -m pip install -r (Join-Path $backendRoot "requirements-desktop.txt")
 Assert-NativeSuccess "Backend dependency installation"
+if (-not $SkipTests) {
+    & $python -m pip install -r (Join-Path $backendRoot "requirements-dev.txt")
+    Assert-NativeSuccess "Backend test dependency installation"
+}
 & $python (Join-Path $repoRoot "scripts\generate_icon.py")
 Assert-NativeSuccess "Icon generation"
 
