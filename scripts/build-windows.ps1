@@ -33,7 +33,9 @@ if ($env:MLIB_PYTHON) {
     $python = (Get-Command python -ErrorAction Stop).Source
 }
 
-Write-Host "[1/7] Preparing application icon"
+Write-Host "[1/7] Installing backend dependencies and preparing application icon"
+& $python -m pip install -r (Join-Path $backendRoot "requirements-desktop.txt")
+Assert-NativeSuccess "Backend dependency installation"
 & $python (Join-Path $repoRoot "scripts\generate_icon.py")
 Assert-NativeSuccess "Icon generation"
 
@@ -91,8 +93,6 @@ if (-not (Test-Path -LiteralPath (Join-Path $frontendBundle "node_modules\next\p
 }
 
 Write-Host "[4/7] Building hidden FastAPI sidecar"
-& $python -m pip install -r (Join-Path $backendRoot "requirements-desktop.txt")
-Assert-NativeSuccess "Backend dependency installation"
 if (-not $SkipTests) {
     Push-Location $backendRoot
     try {
