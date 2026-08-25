@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { AuthStatus, PasswordChange, User, UserProfileUpdate } from "@/lib/types";
+import type { AuthStatus, PasswordChange, PasswordRecovery, RecoveryKeyResult, User, UserProfileUpdate } from "@/lib/types";
 
 type SetupPayload = { username: string; password: string; library_path?: string; import_path?: string };
 type AuthContextValue = {
@@ -15,6 +15,8 @@ type AuthContextValue = {
   refresh: () => Promise<void>;
   updateProfile: (payload: UserProfileUpdate) => Promise<User>;
   changePassword: (payload: PasswordChange) => Promise<void>;
+  recoverPassword: (payload: PasswordRecovery) => Promise<void>;
+  createRecoveryKey: (currentPassword: string) => Promise<string>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -70,6 +72,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       changePassword: async (payload) => {
         await api<void>("/auth/me/password", { method: "PUT", body: payload });
+      },
+      recoverPassword: async (payload) => {
+        const authenticated = await api<User>("/auth/password/recover", { method: "POST", body: payload });
+        setUser(authenticated);
+      },
+      createRecoveryKey: async (currentPassword) => {
+        const result = await api<RecoveryKeyResult>("/auth/me/recovery-key", {
+          method: "POST",
+          body: { current_password: currentPassword },
+        });
+        return result.recovery_key;
       },
     }),
     [loading, refresh, setupRequired, user],

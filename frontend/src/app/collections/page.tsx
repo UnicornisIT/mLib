@@ -87,7 +87,7 @@ export default function CollectionsPage() {
   return (
     <div className="collect-page">
       <header className="collect-nav">
-        <nav aria-label="Разделы collectLib"><button className="active" type="button">Предметы</button><button type="button" onClick={() => document.getElementById("collect-collections")?.scrollIntoView({ behavior: "smooth" })}>Коллекции</button></nav>
+        <nav aria-label="Разделы collectLib"><button className="active" type="button">Предметы</button><button type="button" onClick={() => document.getElementById("collect-collections")?.scrollIntoView()}>Коллекции</button></nav>
         <button className="button primary collect-primary" type="button" onClick={addItem}><Plus size={17} />Добавить предмет</button>
       </header>
 

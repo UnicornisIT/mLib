@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "mLib"
-    app_version: str = "0.0.1-alpha"
+    app_version: str = "0.0.2-alpha"
     app_mode: Literal["desktop", "server"] = "server"
     environment: Literal["development", "test", "production"] = "development"
     api_prefix: str = "/api"

@@ -174,7 +174,7 @@ export default function MovieDetailPage() {
               </button>
             )}
           </div>
-          {selected && <button className="movie-local-play-link" onClick={() => { videoRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); void videoRef.current?.play(); }}><Play size={14} fill="currentColor" />{selected.progress?.position ? "Продолжить локальное видео" : "Смотреть локальный файл"}</button>}
+          {selected && <button className="movie-local-play-link" onClick={() => { videoRef.current?.scrollIntoView({ block: "center" }); void videoRef.current?.play(); }}><Play size={14} fill="currentColor" />{selected.progress?.position ? "Продолжить локальное видео" : "Смотреть локальный файл"}</button>}
         </div>
       </section>
 

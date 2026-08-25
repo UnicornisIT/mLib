@@ -1,6 +1,7 @@
 "use client";
 
 import { BookOpenText, Clapperboard, Gamepad2, Heart, Layers3, Music2, PackageOpen } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 
 type BrandLockupProps = {
@@ -25,7 +26,9 @@ export function BrandLockup({ service, interactive = false, onHomeClick, onServi
           ? Music2
           : Layers3;
   const logoName = service || "home";
-  const mark = <span className={`brand-mark brand-mark-${logoName}`}><Icon size={18} /></span>;
+  const mark = service
+    ? <span className={`brand-mark brand-mark-${logoName}`}><Icon size={18} /></span>
+    : <span className="brand-mark brand-mark-mlib"><Image src="/icon.png" alt="" width={32} height={32} priority /></span>;
 
   const scrollToTop = () => {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;

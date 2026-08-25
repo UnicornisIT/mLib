@@ -68,3 +68,24 @@ class PasswordChangeRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=200)
     new_password: str = Field(min_length=1, max_length=200)
     new_password_confirmation: str = Field(min_length=1, max_length=200)
+
+
+class PasswordResetRequest(BaseModel):
+    new_password: str = Field(min_length=1, max_length=200)
+    new_password_confirmation: str = Field(min_length=1, max_length=200)
+
+
+class PasswordResetResult(BaseModel):
+    username: str
+
+
+class RecoveryKeyCreateRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=200)
+
+
+class RecoveryKeyResult(BaseModel):
+    recovery_key: str
+
+
+class PasswordRecoveryRequest(PasswordResetRequest):
+    recovery_key: str = Field(min_length=16, max_length=200)

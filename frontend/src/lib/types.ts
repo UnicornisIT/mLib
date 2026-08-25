@@ -90,6 +90,12 @@ export type PasswordChange = {
   new_password: string;
   new_password_confirmation: string;
 };
+export type PasswordRecovery = {
+  recovery_key: string;
+  new_password: string;
+  new_password_confirmation: string;
+};
+export type RecoveryKeyResult = { recovery_key: string };
 export type AuthStatus = { setup_required: boolean; authenticated: boolean };
 export type UploadResult = { filename: string; status: "added" | "duplicate" | "error"; detail: string; track: Track | null };
 export type ImportJob = {

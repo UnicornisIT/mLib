@@ -17,6 +17,10 @@ declare global {
       apiBase: string;
       chooseDataFile: (kind: "export" | "import" | "backup" | "restore") => Promise<string | null>;
       openLogs: () => Promise<string>;
+      resetPassword: (payload: {
+        newPassword: string;
+        newPasswordConfirmation: string;
+      }) => Promise<{ username: string }>;
       getUpdateStatus: () => Promise<DesktopUpdateStatus>;
       checkForUpdates: () => Promise<DesktopUpdateStatus>;
       downloadUpdate: () => Promise<DesktopUpdateStatus>;

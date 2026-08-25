@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, CheckCircle2, Database, Film, KeyRound, Save } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Database, Eye, EyeOff, Film, KeyRound, Save } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
@@ -10,6 +10,7 @@ import type { MovieSettings } from "@/lib/types";
 export default function MovieSettingsPage() {
   const [settings, setSettings] = useState<MovieSettings | null>(null);
   const [token, setToken] = useState("");
+  const [tokenVisible, setTokenVisible] = useState(false);
   const [refreshHours, setRefreshHours] = useState(24);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -50,7 +51,15 @@ export default function MovieSettingsPage() {
           <section className="movie-settings-card">
             <div className="movie-settings-card-title"><KeyRound size={20} /><div><h2>Каталог TMDB</h2><p>Постеры, описания, рейтинги и даты выхода эпизодов.</p></div></div>
             <div className={`movie-settings-status ${settings.tmdb_enabled ? "connected" : ""}`}><CheckCircle2 size={15} />{settings.tmdb_enabled ? "Подключён" : "Токен не настроен"}</div>
-            <label className="field"><span>API Read Access Token или API Key v3</span><input className="input" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder={settings.tmdb_enabled ? "Оставьте пустым, чтобы сохранить текущий" : "Вставьте ключ из настроек TMDB"} /></label>
+            <div className="field">
+              <label htmlFor="tmdb-api-token">API Read Access Token или API Key v3</label>
+              <div className="password-input-wrap">
+                <input id="tmdb-api-token" className="input" type={tokenVisible ? "text" : "password"} autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder={settings.tmdb_enabled ? "Оставьте пустым, чтобы сохранить текущий" : "Вставьте ключ из настроек TMDB"} />
+                <button type="button" onClick={() => setTokenVisible((current) => !current)} aria-label={tokenVisible ? "Скрыть токен" : "Показать токен"}>
+                  {tokenVisible ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
+            </div>
             <p className="movie-settings-hint">Поддерживаются новые токены Developer Plan (TMDB…), Read Access Token (eyJ…) и API Key v3. movieLib проверит ключ перед сохранением.</p>
             <label className="field"><span>Обновлять карточки каждые</span><select className="select" value={refreshHours} onChange={(event) => setRefreshHours(Number(event.target.value))}><option value={6}>6 часов</option><option value={12}>12 часов</option><option value={24}>24 часа</option><option value={72}>3 дня</option><option value={168}>7 дней</option></select></label>
             <button className="button primary movie-primary" disabled={saving} onClick={() => void save()}><Save size={16} />{saving ? "Сохраняем…" : "Сохранить"}</button>

@@ -371,6 +371,41 @@ function registerIpc() {
     return result.canceled ? null : result.filePaths[0];
   });
   ipcMain.handle("mlib:open-logs", () => shell.openPath(directories.logs));
+  ipcMain.handle("mlib:reset-password", async (_event, payload) => {
+    const callerUrl = _event.senderFrame?.url || "";
+    if (!frontendPort || !callerUrl.startsWith(`http://127.0.0.1:${frontendPort}/`)) {
+      throw new Error("Восстановление доступа недоступно для этого окна");
+    }
+    const newPassword = payload?.newPassword;
+    const confirmation = payload?.newPasswordConfirmation;
+    if (
+      typeof newPassword !== "string"
+      || typeof confirmation !== "string"
+      || newPassword.length > 200
+      || confirmation.length > 200
+    ) {
+      throw new Error("Не удалось проверить новый пароль");
+    }
+    if (!backendPort || !desktopToken) throw new Error("mLib ещё не готов к восстановлению доступа");
+
+    const response = await fetch(`http://127.0.0.1:${backendPort}/desktop/password-reset`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-mLib-Desktop-Token": desktopToken,
+      },
+      body: JSON.stringify({
+        new_password: newPassword,
+        new_password_confirmation: confirmation,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(typeof result.detail === "string" ? result.detail : "Не удалось сбросить пароль");
+    }
+    return { username: result.username };
+  });
   ipcMain.handle("mlib:update-status", () => updateStatus);
   ipcMain.handle("mlib:update-check", () => checkForUpdates());
   ipcMain.handle("mlib:update-download", async () => {

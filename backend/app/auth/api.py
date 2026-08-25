@@ -9,13 +9,29 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import CurrentUser
 from app.auth.models import User
 from app.auth.password_policy import password_policy_error
-from app.auth.schemas import AuthStatus, Credentials, PasswordChangeRequest, SetupRequest, UserProfileUpdate, UserRead
+from app.auth.password_reset import (
+    PasswordRecoveryError,
+    PasswordResetError,
+    create_recovery_key,
+    reset_user_password,
+    verify_recovery_key,
+)
+from app.auth.schemas import (
+    AuthStatus,
+    Credentials,
+    PasswordChangeRequest,
+    PasswordRecoveryRequest,
+    RecoveryKeyCreateRequest,
+    RecoveryKeyResult,
+    SetupRequest,
+    UserProfileUpdate,
+    UserRead,
+)
 from app.core.config import Settings, get_settings
 from app.core.security import (
     create_session_token,
     decode_session_token,
     hash_password,
-    normalize_password,
     password_needs_rehash,
     utcnow,
     verify_password,
@@ -144,14 +160,7 @@ def _seconds_until(value: datetime | None) -> int:
     return max(0, int((comparable - utcnow()).total_seconds()) + 1)
 
 
-@router.put("/me/password", status_code=status.HTTP_204_NO_CONTENT)
-def change_password(
-    payload: PasswordChangeRequest,
-    response: Response,
-    user: CurrentUser,
-    db: Annotated[Session, Depends(get_core_db)],
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> None:
+def _verify_current_password(user: User, current_password: str, db: Session) -> None:
     retry_after = _seconds_until(user.password_change_locked_until)
     if retry_after:
         raise HTTPException(
@@ -163,35 +172,93 @@ def change_password(
         user.password_change_locked_until = None
         user.password_change_failures = 0
 
-    if not verify_password(payload.current_password, user.password_hash):
-        user.password_change_failures += 1
-        if user.password_change_failures >= 5:
-            user.password_change_locked_until = utcnow() + timedelta(minutes=15)
-        db.add(user)
-        db.commit()
-        if user.password_change_locked_until:
-            raise HTTPException(
-                status_code=429,
-                detail="Слишком много неудачных попыток. Смена пароля временно заблокирована на 15 минут",
-                headers={"Retry-After": "900"},
-            )
-        raise HTTPException(status_code=400, detail="Текущий пароль указан неверно")
+    if verify_password(current_password, user.password_hash):
+        if user.password_change_failures or user.password_change_locked_until is not None:
+            user.password_change_failures = 0
+            user.password_change_locked_until = None
+            db.add(user)
+        return
 
-    if normalize_password(payload.new_password) != normalize_password(payload.new_password_confirmation):
-        raise HTTPException(status_code=422, detail="Новые пароли не совпадают")
-    if policy_error := password_policy_error(payload.new_password, user.username):
-        raise HTTPException(status_code=422, detail=policy_error)
-    if verify_password(payload.new_password, user.password_hash):
-        raise HTTPException(status_code=422, detail="Новый пароль должен отличаться от текущего")
-
-    user.password_hash = hash_password(payload.new_password)
-    user.password_changed_at = utcnow()
-    user.password_change_failures = 0
-    user.password_change_locked_until = None
-    user.session_version += 1
+    user.password_change_failures += 1
+    if user.password_change_failures >= 5:
+        user.password_change_locked_until = utcnow() + timedelta(minutes=15)
     db.add(user)
     db.commit()
-    db.refresh(user)
+    if user.password_change_locked_until:
+        raise HTTPException(
+            status_code=429,
+            detail="Слишком много неудачных попыток. Смена пароля временно заблокирована на 15 минут",
+            headers={"Retry-After": "900"},
+        )
+    raise HTTPException(status_code=400, detail="Текущий пароль указан неверно")
+
+
+@router.put("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(
+    payload: PasswordChangeRequest,
+    response: Response,
+    user: CurrentUser,
+    db: Annotated[Session, Depends(get_core_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> None:
+    _verify_current_password(user, payload.current_password, db)
+
+    try:
+        reset_user_password(
+            db,
+            user,
+            payload.new_password,
+            payload.new_password_confirmation,
+        )
+    except PasswordResetError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     set_session_cookie(response, user, settings)
     response.headers["Cache-Control"] = "no-store"
+
+
+@router.post("/me/recovery-key", response_model=RecoveryKeyResult)
+def issue_recovery_key(
+    payload: RecoveryKeyCreateRequest,
+    response: Response,
+    user: CurrentUser,
+    db: Annotated[Session, Depends(get_core_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> RecoveryKeyResult:
+    _verify_current_password(user, payload.current_password, db)
+    recovery_key = create_recovery_key(db, settings.secret_key)
+    response.headers["Cache-Control"] = "no-store"
+    return RecoveryKeyResult(recovery_key=recovery_key)
+
+
+@router.post("/password/recover", response_model=UserRead)
+def recover_password(
+    payload: PasswordRecoveryRequest,
+    response: Response,
+    db: Annotated[Session, Depends(get_core_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> User:
+    user = db.scalar(
+        select(User)
+        .where(User.is_admin.is_(True), User.is_active.is_(True))
+        .order_by(User.created_at.asc())
+    )
+    if user is None:
+        raise HTTPException(status_code=409, detail="Профиль администратора ещё не создан")
+    try:
+        verify_recovery_key(db, payload.recovery_key, settings.secret_key)
+        reset_user_password(
+            db,
+            user,
+            payload.new_password,
+            payload.new_password_confirmation,
+        )
+    except PasswordRecoveryError as exc:
+        headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after else None
+        raise HTTPException(status_code=429 if exc.retry_after else 400, detail=str(exc), headers=headers) from exc
+    except PasswordResetError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    set_session_cookie(response, user, settings)
+    response.headers["Cache-Control"] = "no-store"
+    return user

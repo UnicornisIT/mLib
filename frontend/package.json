@@ -1,9 +1,9 @@
 {
   "name": "mlib-frontend",
-  "version": "0.0.1-alpha",
+  "version": "0.0.2-alpha",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/dev.mjs",
     "build": "next build",
     "test:e2e": "python e2e/run.py",
     "test:e2e:install": "playwright install chromium",

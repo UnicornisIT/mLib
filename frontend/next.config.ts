@@ -1,11 +1,18 @@
 import type { NextConfig } from "next";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const backend = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:8000";
 const musicSections = ["tracks", "albums", "artists", "genres", "favorites", "playlists", "search", "settings"];
+const frontendRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  allowedDevOrigins: ["127.0.0.1"],
+  turbopack: {
+    root: frontendRoot,
+  },
   devIndicators: process.env.MLIB_E2E === "1" ? false : undefined,
   images: {
     remotePatterns: [{ protocol: "https", hostname: "image.tmdb.org", pathname: "/t/p/**" }],
