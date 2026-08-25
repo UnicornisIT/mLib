@@ -75,11 +75,11 @@ async function setup(page: import("@playwright/test").Page) {
   await expect(page.getByRole("button", { name: /Начать|Войти/ })).toBeVisible({ timeout: 30_000 });
   if (await page.getByRole("button", { name: "Начать" }).isVisible()) {
     await page.getByLabel("Имя пользователя").fill(username);
-    await page.getByLabel("Пароль").fill(password);
+    await page.getByLabel("Пароль", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Начать" }).click();
   } else {
     await page.getByLabel("Имя пользователя").fill(username);
-    await page.getByLabel("Пароль").fill(password);
+    await page.getByLabel("Пароль", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Войти" }).click();
   }
   await expect(page.getByRole("heading", { name: "Что откроем сегодня?" })).toBeVisible({ timeout: 30_000 });
@@ -137,10 +137,10 @@ test.describe("release smoke", () => {
     await page.getByRole("button", { name: "Выйти" }).click();
     await expect(page.getByRole("heading", { name: "Войдите в mLib" })).toBeVisible();
     await page.getByLabel("Имя пользователя").fill(username);
-    await page.getByLabel("Пароль").fill("wrong password");
+    await page.getByLabel("Пароль", { exact: true }).fill("wrong password");
     await page.getByRole("button", { name: "Войти" }).click();
     await expect(page.getByText("Неверное имя пользователя или пароль")).toBeVisible();
-    await page.getByLabel("Пароль").fill(password);
+    await page.getByLabel("Пароль", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Войти" }).click();
     await expect(page.getByRole("heading", { name: "Что откроем сегодня?" })).toBeVisible();
     await page.goto("/music/playlists");
