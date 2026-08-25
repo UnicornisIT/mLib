@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: windows-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   installer:
     runs-on: windows-latest
@@ -78,9 +82,23 @@ jobs:
             throw "Could not read GitHub Releases."
           }
 
+          $releaseNotes = ".github/release-notes/$tag.md"
           if ($releaseExists) {
             gh release upload $tag $installer.FullName $checksum.FullName `
               $blockmap.FullName $updateManifest.FullName --clobber
+            if ($LASTEXITCODE -ne 0) {
+              throw "Could not replace GitHub Release assets."
+            }
+            $editArguments = @($tag)
+            if (Test-Path -LiteralPath $releaseNotes) {
+              $editArguments += @("--notes-file", $releaseNotes)
+            }
+            if ($tag.Contains("-")) {
+              $editArguments += "--prerelease"
+            }
+            if ($editArguments.Count -gt 1) {
+              gh release edit @editArguments
+            }
           } else {
             $releaseArguments = @(
               $tag,
@@ -91,7 +109,6 @@ jobs:
               "--title", "mLib $tag",
               "--verify-tag"
             )
-            $releaseNotes = ".github/release-notes/$tag.md"
             if (Test-Path -LiteralPath $releaseNotes) {
               $releaseArguments += @("--notes-file", $releaseNotes)
             } else {

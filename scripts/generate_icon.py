@@ -1,44 +1,50 @@
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 
-def icon(size: int) -> Image.Image:
-    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    margin = round(size * 0.08)
-    radius = round(size * 0.22)
-    draw.rounded_rectangle(
-        (margin, margin, size - margin, size - margin),
-        radius=radius,
-        fill=(52, 67, 83, 255),
-    )
-    # The three offset layers mirror the existing Layers3 home mark.
-    stroke = max(2, round(size * 0.055))
-    center = size / 2
-    width = size * 0.52
-    height = size * 0.22
-    for offset, color in ((size * -0.13, (245, 243, 236, 255)), (0, (222, 225, 221, 255)), (size * 0.13, (194, 203, 207, 255))):
-        y = center + offset
-        points = [
-            (center, y - height / 2),
-            (center + width / 2, y),
-            (center, y + height / 2),
-            (center - width / 2, y),
-        ]
-        draw.line(points + [points[0]], fill=color, width=stroke, joint="curve")
+ROOT = Path(__file__).resolve().parents[1]
+MASTER_ICON = ROOT / "assets" / "branding" / "mlib-icon-master.png"
+DESKTOP_BUILD = ROOT / "desktop" / "build"
+FRONTEND_APP = ROOT / "frontend" / "src" / "app"
+
+
+def render_icon(source: Image.Image, size: int) -> Image.Image:
+    return source.resize((size, size), Image.Resampling.LANCZOS)
+
+
+def load_master() -> Image.Image:
+    if not MASTER_ICON.is_file():
+        raise FileNotFoundError(f"Master icon was not found: {MASTER_ICON}")
+    image = Image.open(MASTER_ICON).convert("RGBA")
+    if image.width != image.height:
+        raise ValueError("Master icon must have a square canvas")
+
+    # Remove effectively invisible edge noise without touching antialiased artwork.
+    alpha = image.getchannel("A").point(lambda value: 0 if value <= 4 else value)
+    image.putalpha(alpha)
     return image
 
 
 def main() -> None:
-    root = Path(__file__).resolve().parents[1] / "desktop" / "build"
-    root.mkdir(parents=True, exist_ok=True)
-    image = icon(512)
-    image.save(root / "icon.png")
-    image.save(
-        root / "icon.ico",
+    source = load_master()
+    DESKTOP_BUILD.mkdir(parents=True, exist_ok=True)
+    FRONTEND_APP.mkdir(parents=True, exist_ok=True)
+
+    desktop_icon = render_icon(source, 512)
+    desktop_icon.save(DESKTOP_BUILD / "icon.png", optimize=True)
+    desktop_icon.save(
+        DESKTOP_BUILD / "icon.ico",
         format="ICO",
         sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
+    )
+
+    desktop_icon.save(FRONTEND_APP / "icon.png", optimize=True)
+    render_icon(source, 180).save(FRONTEND_APP / "apple-icon.png", optimize=True)
+    desktop_icon.save(
+        FRONTEND_APP / "favicon.ico",
+        format="ICO",
+        sizes=[(16, 16), (32, 32), (48, 48)],
     )
 
 
