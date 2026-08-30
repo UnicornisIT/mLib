@@ -1,6 +1,6 @@
 {
   "name": "mlib-desktop",
-  "version": "0.0.2-alpha",
+  "version": "0.0.3-alpha",
   "private": true,
   "description": "mLib Windows desktop shell",
   "main": "main.cjs",

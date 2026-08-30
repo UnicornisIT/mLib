@@ -12,8 +12,8 @@ export type ReleaseAnnouncement = {
 };
 
 const announcements: Record<string, ReleaseAnnouncement> = {
-  "0.0.2-alpha": {
-    version: "0.0.2-alpha",
+  "0.0.3-alpha": {
+    version: "0.0.3-alpha",
     title: "Что нового в mLib",
     intro: "В этой версии мы сделали доступ к библиотеке надёжнее, а ежедневную работу — заметно удобнее.",
     notes: [

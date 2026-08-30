@@ -114,7 +114,7 @@ $env:MLIB_PYTHON = "C:\Python312\python.exe"
 Результат:
 
 ```text
-dist\mLib-Setup-0.0.2-alpha-x64.exe
+dist\mLib-Setup-0.0.3-alpha-x64.exe
 ```
 
 Установщик ставит GUI-приложение в стандартный Program Files, создаёт ярлыки меню «Пуск» и рабочего стола и регистрирует uninstall. `deleteAppDataOnUninstall=false`, поэтому `%LOCALAPPDATA%\mLib` не удаляется. Повторная установка находит старую библиотеку и применяет только недостающие migrations.
@@ -147,8 +147,8 @@ Workflow `.github/workflows/windows-desktop.yml` собирает тот же in
 Чтобы автоматически создать публичный GitHub Release и прикрепить к нему EXE, SHA-256, blockmap и `latest.yml`, отправьте тег, совпадающий с версией в `desktop/package.json`:
 
 ```powershell
-git tag v0.0.2-alpha
-git push origin v0.0.2-alpha
+git tag v0.0.3-alpha
+git push origin v0.0.3-alpha
 ```
 
 После успешной сборки файлы появятся в разделе `Releases` репозитория. Тег с суффиксом, например `-alpha`, автоматически публикуется как prerelease. Повторный запуск workflow для того же тега заменяет вложения актуальной сборкой. Для следующего выпуска сначала синхронно обновите версии во всех трёх файлах, перечисленных выше, а затем используйте новый тег.

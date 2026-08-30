@@ -1,6 +1,6 @@
 {
   "name": "mlib-frontend",
-  "version": "0.0.2-alpha",
+  "version": "0.0.3-alpha",
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.mjs",
