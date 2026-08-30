@@ -17,6 +17,8 @@ declare global {
       apiBase: string;
       chooseDataFile: (kind: "export" | "import" | "backup" | "restore") => Promise<string | null>;
       openLogs: () => Promise<string>;
+      getReleaseNotesSeenVersion: (userId: string) => Promise<string | null>;
+      markReleaseNotesSeen: (userId: string, version: string) => Promise<boolean>;
       resetPassword: (payload: {
         newPassword: string;
         newPasswordConfirmation: string;

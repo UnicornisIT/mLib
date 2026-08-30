@@ -83,6 +83,10 @@ async function setup(page: import("@playwright/test").Page) {
     await page.getByRole("button", { name: "Войти" }).click();
   }
   await expect(page.getByRole("heading", { name: "Что откроем сегодня?" })).toBeVisible({ timeout: 30_000 });
+  const releaseNotes = page.getByRole("dialog", { name: "Что нового в mLib" });
+  await expect(releaseNotes).toBeVisible();
+  await releaseNotes.getByRole("button", { name: "Продолжить" }).click();
+  await expect(releaseNotes).toBeHidden();
 }
 
 test.describe("release smoke", () => {
@@ -143,6 +147,7 @@ test.describe("release smoke", () => {
     await page.getByLabel("Пароль", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Войти" }).click();
     await expect(page.getByRole("heading", { name: "Что откроем сегодня?" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Что нового в mLib" })).toBeHidden();
     await page.goto("/music/playlists");
     await page.getByRole("button", { name: /Release Playlist/ }).click();
     await expect(page.getByRole("main").getByText("Release Track Edited").first()).toBeVisible();

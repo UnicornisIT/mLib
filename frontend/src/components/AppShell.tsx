@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PlayerBar } from "@/components/PlayerBar";
+import { ReleaseNotesDialog } from "@/components/ReleaseNotesDialog";
 import { ServiceFooter } from "@/components/ServiceFooter";
 import { ServiceHeader } from "@/components/ServiceHeader";
 import { Sidebar } from "@/components/Sidebar";
@@ -35,23 +36,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (loading || !user) return <div className="app-loading"><div className="loading-mark" /></div>;
   if (!isMusicPage) {
     return (
-      <div className="service-layout">
-        <ServiceHeader />
-        <main className="service-main">{children}</main>
-        <ServiceFooter />
-      </div>
+      <>
+        <div className="service-layout">
+          <ServiceHeader />
+          <main className="service-main">{children}</main>
+          <ServiceFooter />
+        </div>
+        <ReleaseNotesDialog userId={user.id} />
+      </>
     );
   }
   return (
-    <div className="app-layout">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="main-column">
-        <Topbar onMenu={() => setSidebarOpen(true)} onUpload={() => setUploadOpen(true)} />
-        <main>{children}</main>
-        <ServiceFooter />
+    <>
+      <div className="app-layout">
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <div className="main-column">
+          <Topbar onMenu={() => setSidebarOpen(true)} onUpload={() => setUploadOpen(true)} />
+          <main>{children}</main>
+          <ServiceFooter />
+        </div>
+        <PlayerBar />
+        <UploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} />
       </div>
-      <PlayerBar />
-      <UploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} />
-    </div>
+      <ReleaseNotesDialog userId={user.id} />
+    </>
   );
 }

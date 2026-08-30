@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld("mlibDesktop", Object.freeze({
   apiBase,
   chooseDataFile: (kind) => ipcRenderer.invoke("mlib:choose-data-file", kind),
   openLogs: () => ipcRenderer.invoke("mlib:open-logs"),
+  getReleaseNotesSeenVersion: (userId) => ipcRenderer.invoke("mlib:release-notes-seen", userId),
+  markReleaseNotesSeen: (userId, version) => ipcRenderer.invoke("mlib:release-notes-mark-seen", userId, version),
   resetPassword: (payload) => ipcRenderer.invoke("mlib:reset-password", payload),
   getUpdateStatus: () => ipcRenderer.invoke("mlib:update-status"),
   checkForUpdates: () => ipcRenderer.invoke("mlib:update-check"),

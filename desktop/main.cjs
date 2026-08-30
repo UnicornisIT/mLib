@@ -178,6 +178,45 @@ function loadOrCreateSecret() {
   return secretKey;
 }
 
+const releaseNotesStatePath = path.join(directories.config, "release-notes.json");
+const validReleaseNotesUserId = (value) => typeof value === "string" && /^[a-zA-Z0-9-]{1,128}$/.test(value);
+const validReleaseVersion = (value) => typeof value === "string" && /^[0-9a-zA-Z.+-]{1,64}$/.test(value);
+
+function loadReleaseNotesState() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(releaseNotesStatePath, "utf8"));
+    const seen = {};
+    if (parsed?.version === 1 && parsed.seen && typeof parsed.seen === "object" && !Array.isArray(parsed.seen)) {
+      for (const [userId, releaseVersion] of Object.entries(parsed.seen)) {
+        if (validReleaseNotesUserId(userId) && validReleaseVersion(releaseVersion)) seen[userId] = releaseVersion;
+      }
+    }
+    return { version: 1, seen };
+  } catch {
+    return { version: 1, seen: {} };
+  }
+}
+
+function markReleaseNotesSeen(userId, releaseVersion) {
+  if (!validReleaseNotesUserId(userId) || !validReleaseVersion(releaseVersion)) {
+    throw new Error("Не удалось сохранить просмотр изменений");
+  }
+  ensureDirectories();
+  const state = loadReleaseNotesState();
+  state.seen[userId] = releaseVersion;
+  const partial = `${releaseNotesStatePath}.partial`;
+  fs.writeFileSync(partial, JSON.stringify(state, null, 2), { encoding: "utf8", mode: 0o600 });
+  fs.renameSync(partial, releaseNotesStatePath);
+  return true;
+}
+
+function assertTrustedRenderer(event) {
+  const callerUrl = event.senderFrame?.url || "";
+  if (!frontendPort || !callerUrl.startsWith(`http://127.0.0.1:${frontendPort}/`)) {
+    throw new Error("Действие недоступно для этого окна");
+  }
+}
+
 function freePort() {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -371,6 +410,15 @@ function registerIpc() {
     return result.canceled ? null : result.filePaths[0];
   });
   ipcMain.handle("mlib:open-logs", () => shell.openPath(directories.logs));
+  ipcMain.handle("mlib:release-notes-seen", (event, userId) => {
+    assertTrustedRenderer(event);
+    if (!validReleaseNotesUserId(userId)) return null;
+    return loadReleaseNotesState().seen[userId] ?? null;
+  });
+  ipcMain.handle("mlib:release-notes-mark-seen", (event, userId, releaseVersion) => {
+    assertTrustedRenderer(event);
+    return markReleaseNotesSeen(userId, releaseVersion);
+  });
   ipcMain.handle("mlib:reset-password", async (_event, payload) => {
     const callerUrl = _event.senderFrame?.url || "";
     if (!frontendPort || !callerUrl.startsWith(`http://127.0.0.1:${frontendPort}/`)) {
