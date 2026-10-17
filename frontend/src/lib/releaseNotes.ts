@@ -12,6 +12,28 @@ export type ReleaseAnnouncement = {
 };
 
 const announcements: Record<string, ReleaseAnnouncement> = {
+  "0.0.4-alpha": {
+    version: "0.0.4-alpha",
+    title: "Что нового в mLib",
+    intro: "В этой версии мы исправили загрузку файлов и ускорили запуск после обновления.",
+    notes: [
+      {
+        icon: "motion",
+        title: "Загрузка треков и книг",
+        description: "Музыка и книги снова загружаются в приложении для Windows.",
+      },
+      {
+        icon: "shield",
+        title: "Надёжная докачка видео",
+        description: "Прерванная загрузка видео продолжается без повреждения файла.",
+      },
+      {
+        icon: "key",
+        title: "Быстрый запуск после обновления",
+        description: "Перед обновлением базы сохраняется только она сама, поэтому большие библиотеки запускаются быстро.",
+      },
+    ],
+  },
   "0.0.3-alpha": {
     version: "0.0.3-alpha",
     title: "Что нового в mLib",
