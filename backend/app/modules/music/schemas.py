@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ArtworkRead(BaseModel):
@@ -20,6 +20,21 @@ class AlbumBrief(BaseModel):
     album_artist: str
     year: int | None = None
     artwork_id: str | None = None
+
+
+class CatalogTrackRead(BaseModel):
+    id: str
+    apple_track_id: str
+    isrc: str | None = None
+    title: str
+    artist_name: str
+    album_title: str | None = None
+    year: int | None = None
+    duration_ms: int | None = None
+    artwork_url: str | None = None
+    enrich_status: Literal["pending", "enriched", "not_found", "error"]
+    has_file: bool
+    track_id: str | None = None
 
 
 class TrackRead(BaseModel):
@@ -219,7 +234,9 @@ class PlaylistUpdate(BaseModel):
 class PlaylistItemRead(BaseModel):
     id: str
     position: int
-    track: TrackRead
+    # The playable file: the entry's own track, or the file attached to its catalog track.
+    track: TrackRead | None = None
+    catalog_track: CatalogTrackRead | None = None
 
 
 class PlaylistRead(BaseModel):
@@ -235,8 +252,15 @@ class PlaylistRead(BaseModel):
 
 
 class PlaylistTrackAdd(BaseModel):
-    track_id: str
+    track_id: str | None = None
+    catalog_track_id: str | None = None
     position: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def require_one_source(self) -> "PlaylistTrackAdd":
+        if (self.track_id is None) == (self.catalog_track_id is None):
+            raise ValueError("Укажите либо трек, либо трек из каталога")
+        return self
 
 
 class PlaylistReorder(BaseModel):

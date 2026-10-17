@@ -110,7 +110,21 @@ export type ImportJob = {
   current_file: string | null;
   error_message: string | null;
 };
-export type PlaylistItem = { id: string; position: number; track: Track };
+export type CatalogTrack = {
+  id: string;
+  apple_track_id: string;
+  isrc: string | null;
+  title: string;
+  artist_name: string;
+  album_title: string | null;
+  year: number | null;
+  duration_ms: number | null;
+  artwork_url: string | null;
+  enrich_status: "pending" | "enriched" | "not_found" | "error";
+  has_file: boolean;
+  track_id: string | null;
+};
+export type PlaylistItem = { id: string; position: number; track: Track | null; catalog_track: CatalogTrack | null };
 export type Playlist = {
   id: string;
   name: string;

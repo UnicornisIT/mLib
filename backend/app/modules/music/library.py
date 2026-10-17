@@ -10,9 +10,10 @@ from app.core.config import Settings
 from app.core.security import utcnow
 from app.modules.music.artwork import save_artwork
 from app.modules.music.metadata import NormalizedTrackMetadata, extract_metadata, normalize_identity
-from app.modules.music.models import Album, Artist, Favorite, MusicSetting, Track
+from app.modules.music.models import Album, Artist, CatalogTrack, Favorite, MusicSetting, Track
 from app.modules.music.quality import attention_status, metadata_issues, needs_attention
-from app.modules.music.schemas import AlbumBrief, ArtistBrief, TrackRead
+from app.modules.music.schemas import AlbumBrief, ArtistBrief, CatalogTrackRead, TrackRead
+from app.modules.music.transfer.itunes import sized_artwork_url
 from app.storage.service import LocalMediaStorage, StagedFile
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,24 @@ def serialize_track(track: Track, favorite: bool = False) -> TrackRead:
         last_played_at=track.last_played_at,
         date_added=track.date_added,
         date_modified=track.date_modified,
+    )
+
+
+def serialize_catalog_track(item: CatalogTrack) -> CatalogTrackRead:
+    track = item.track
+    return CatalogTrackRead(
+        id=item.id,
+        apple_track_id=item.apple_track_id,
+        isrc=item.isrc,
+        title=item.title,
+        artist_name=item.artist_name,
+        album_title=item.album_title,
+        year=item.year,
+        duration_ms=item.duration_ms,
+        artwork_url=sized_artwork_url(item.artwork_url),
+        enrich_status=item.enrich_status,
+        has_file=track is not None,
+        track_id=track.id if track else None,
     )
 
 

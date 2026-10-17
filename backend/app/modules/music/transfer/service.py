@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import utcnow
 from app.modules.music.metadata import normalize_identity
-from app.modules.music.models import CatalogTrack, TransferJob
+from app.modules.music.models import CatalogTrack, Playlist, PlaylistTrack, TransferJob
 from app.modules.music.transfer.sources import ParsedLibrary, SourceTrack
 
 ACTIVE_STATUSES = {"queued", "enriching"}
@@ -65,6 +65,37 @@ def import_library(db: Session, job: TransferJob, parsed: ParsedLibrary) -> dict
     job.errors = parsed.invalid_rows
     db.flush()
     return resolved
+
+
+def import_playlists(
+    db: Session, owner_id: str, playlists: dict[str, list[str]], resolved: dict[str, CatalogTrack]
+) -> list[str]:
+    """Creates (or extends) one playlist per "Playlist name"; entries already present are kept once."""
+    touched: list[str] = []
+    for name, external_ids in playlists.items():
+        playlist = db.scalar(
+            select(Playlist).where(Playlist.owner_id == owner_id, Playlist.name == name, Playlist.is_system.is_(False))
+        )
+        if playlist is None:
+            playlist = Playlist(owner_id=owner_id, name=name[:255])
+            db.add(playlist)
+            db.flush()
+        present = {item.catalog_track_id for item in playlist.items if item.catalog_track_id}
+        present |= {
+            item.track.catalog_track_id for item in playlist.items if item.track and item.track.catalog_track_id
+        }
+        position = max((item.position for item in playlist.items), default=-1) + 1
+        for external_id in external_ids:
+            catalog_track = resolved.get(external_id)
+            if catalog_track is None or catalog_track.id in present:
+                continue
+            db.add(PlaylistTrack(playlist_id=playlist.id, catalog_track_id=catalog_track.id, position=position))
+            present.add(catalog_track.id)
+            position += 1
+        playlist.updated_at = utcnow()
+        touched.append(playlist.name)
+    db.flush()
+    return touched
 
 
 def refresh_counters(db: Session, job: TransferJob) -> None:

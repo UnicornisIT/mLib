@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -158,9 +159,7 @@ class CatalogTrack(MusicBase):
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     storefront: Mapped[str | None] = mapped_column(String(8))
     source: Mapped[str] = mapped_column(String(40), nullable=False, default="apple_music_csv")
-    transfer_job_id: Mapped[str | None] = mapped_column(
-        ForeignKey("music_transfer_jobs.id", ondelete="SET NULL")
-    )
+    transfer_job_id: Mapped[str | None] = mapped_column(ForeignKey("music_transfer_jobs.id", ondelete="SET NULL"))
     enrich_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     enrich_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     enriched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -233,15 +232,29 @@ class Playlist(MusicBase):
     )
 
 
+PLAYLIST_ITEM_SOURCE_CHECK = (
+    "(track_id IS NOT NULL AND catalog_track_id IS NULL) OR (track_id IS NULL AND catalog_track_id IS NOT NULL)"
+)
+
+
 class PlaylistTrack(MusicBase):
+    """A playlist entry: either a local file or a catalog track that may not have a file yet."""
+
     __tablename__ = "music_playlist_tracks"
-    __table_args__ = (UniqueConstraint("playlist_id", "position", name="uq_playlist_position"),)
+    __table_args__ = (
+        UniqueConstraint("playlist_id", "position", name="uq_playlist_position"),
+        CheckConstraint(PLAYLIST_ITEM_SOURCE_CHECK, name="ck_music_playlist_tracks_source"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4)
     playlist_id: Mapped[str] = mapped_column(ForeignKey("music_playlists.id", ondelete="CASCADE"), index=True)
-    track_id: Mapped[str] = mapped_column(ForeignKey("music_tracks.id", ondelete="CASCADE"), index=True)
+    track_id: Mapped[str | None] = mapped_column(ForeignKey("music_tracks.id", ondelete="CASCADE"), index=True)
+    catalog_track_id: Mapped[str | None] = mapped_column(
+        ForeignKey("music_catalog_tracks.id", ondelete="CASCADE"), index=True
+    )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     playlist: Mapped[Playlist] = relationship(back_populates="items")
-    track: Mapped[Track] = relationship()
+    track: Mapped[Track | None] = relationship()
+    catalog_track: Mapped[CatalogTrack | None] = relationship()

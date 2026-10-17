@@ -167,7 +167,7 @@ def test_transfer_imports_catalog_and_enriches_with_storefront_fallback(
 
     fake = run_worker()
     assert [country for _, country in fake.calls] == ["ru", "us", "tr"]
-    assert fake.calls[1][0] == ["1003", "1004"]
+    assert sorted(fake.calls[1][0]) == ["1003", "1004"]
 
     status = authenticated_client.get(f"/api/music/transfer/{job['id']}").json()
     assert status["status"] == "completed"
@@ -274,3 +274,18 @@ def test_transfer_survives_lookup_failures(authenticated_client: TestClient, db:
 
 def test_transfer_requires_admin_for_changes(client: TestClient) -> None:
     assert upload(client).status_code == 401
+
+
+def test_transfer_can_create_playlists_from_playlist_column(authenticated_client: TestClient) -> None:
+    assert upload(authenticated_client).status_code == 202
+    assert authenticated_client.get("/api/music/playlists").json() == []
+
+    upload(authenticated_client, create_playlists="true")
+    upload(authenticated_client, create_playlists="true")
+    playlists = {item["name"]: item for item in authenticated_client.get("/api/music/playlists").json()}
+    assert set(playlists) == {"Дорога", "Ev"}
+    road = authenticated_client.get(f"/api/music/playlists/{playlists['Дорога']['id']}").json()
+    assert [item["catalog_track"]["apple_track_id"] for item in road["items"]] == ["1001", "1002"]
+    assert all(item["track"] is None for item in road["items"])
+    ev = authenticated_client.get(f"/api/music/playlists/{playlists['Ev']['id']}").json()
+    assert [item["catalog_track"]["apple_track_id"] for item in ev["items"]] == ["1003", "1004", "1001"]

@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth.dependencies import CurrentUser
 from app.database.session import get_music_db as get_db
-from app.modules.music.library import serialize_track
-from app.modules.music.models import Favorite, Playlist, PlaylistTrack, Track
+from app.modules.music.library import serialize_catalog_track, serialize_track
+from app.modules.music.models import CatalogTrack, Favorite, Playlist, PlaylistTrack, Track
 from app.modules.music.schemas import (
     PlaylistCreate,
     PlaylistItemRead,
@@ -21,14 +21,33 @@ router = APIRouter(prefix="/playlists", tags=["music playlists"])
 
 
 def playlist_query():
+    catalog_file = (
+        selectinload(Playlist.items).selectinload(PlaylistTrack.catalog_track).selectinload(CatalogTrack.track)
+    )
     return (
         select(Playlist)
         .execution_options(populate_existing=True)
         .options(
             selectinload(Playlist.items).selectinload(PlaylistTrack.track).selectinload(Track.artist),
             selectinload(Playlist.items).selectinload(PlaylistTrack.track).selectinload(Track.album),
+            catalog_file.selectinload(Track.artist),
+            catalog_file.selectinload(Track.album),
         )
     )
+
+
+def playable_track(item: PlaylistTrack) -> Track | None:
+    if item.track is not None:
+        return item.track
+    return item.catalog_track.track if item.catalog_track is not None else None
+
+
+def item_duration(item: PlaylistTrack) -> float:
+    track = playable_track(item)
+    if track is not None:
+        return track.duration
+    duration_ms = item.catalog_track.duration_ms if item.catalog_track is not None else None
+    return (duration_ms or 0) / 1000
 
 
 def get_playlist(db: Session, playlist_id: str, user_id: str) -> Playlist:
@@ -39,28 +58,32 @@ def get_playlist(db: Session, playlist_id: str, user_id: str) -> Playlist:
 
 
 def serialize_playlist(db: Session, playlist: Playlist, include_items: bool = False) -> PlaylistRead:
+    track_ids = [track.id for item in playlist.items if (track := playable_track(item)) is not None]
     favorite_ids = (
         set(
             db.scalars(
                 select(Favorite.track_id).where(
                     Favorite.user_id == playlist.owner_id,
-                    Favorite.track_id.in_([item.track_id for item in playlist.items]),
+                    Favorite.track_id.in_(track_ids),
                 )
             ).all()
         )
-        if playlist.items
+        if track_ids
         else set()
     )
     items = None
     if include_items:
-        items = [
-            PlaylistItemRead(
-                id=item.id,
-                position=item.position,
-                track=serialize_track(item.track, item.track_id in favorite_ids),
+        items = []
+        for item in sorted(playlist.items, key=lambda value: value.position):
+            track = playable_track(item)
+            items.append(
+                PlaylistItemRead(
+                    id=item.id,
+                    position=item.position,
+                    track=serialize_track(track, track.id in favorite_ids) if track else None,
+                    catalog_track=serialize_catalog_track(item.catalog_track) if item.catalog_track else None,
+                )
             )
-            for item in sorted(playlist.items, key=lambda value: value.position)
-        ]
     return PlaylistRead(
         id=playlist.id,
         name=playlist.name,
@@ -69,7 +92,7 @@ def serialize_playlist(db: Session, playlist: Playlist, include_items: bool = Fa
         created_at=playlist.created_at,
         updated_at=playlist.updated_at,
         track_count=len(playlist.items),
-        duration=sum(item.track.duration for item in playlist.items),
+        duration=sum(item_duration(item) for item in playlist.items),
         items=items,
     )
 
@@ -133,8 +156,10 @@ def delete_playlist(
 
 
 def apply_positions(db: Session, items: list[PlaylistTrack]) -> None:
+    # Temporary values stay below -len(items), so they never collide with the -(len + 1)
+    # placeholder of a freshly inserted entry while rows are updated one by one.
     for index, item in enumerate(items):
-        item.position = -(index + 1)
+        item.position = -(index + 1 + len(items))
     db.flush()
     for index, item in enumerate(items):
         item.position = index
@@ -149,11 +174,18 @@ def add_playlist_track(
     db: Annotated[Session, Depends(get_db)],
 ) -> PlaylistRead:
     playlist = get_playlist(db, playlist_id, user.id)
-    if db.get(Track, payload.track_id) is None:
+    if payload.track_id is not None and db.get(Track, payload.track_id) is None:
         raise HTTPException(status_code=404, detail="Трек не найден")
+    if payload.catalog_track_id is not None and db.get(CatalogTrack, payload.catalog_track_id) is None:
+        raise HTTPException(status_code=404, detail="Трек каталога не найден")
     items = sorted(playlist.items, key=lambda value: value.position)
     insert_at = len(items) if payload.position is None else min(payload.position, len(items))
-    item = PlaylistTrack(playlist_id=playlist.id, track_id=payload.track_id, position=-(len(items) + 1))
+    item = PlaylistTrack(
+        playlist_id=playlist.id,
+        track_id=payload.track_id,
+        catalog_track_id=payload.catalog_track_id,
+        position=-(len(items) + 1),
+    )
     db.add(item)
     db.flush()
     items.insert(insert_at, item)

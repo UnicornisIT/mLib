@@ -12,7 +12,13 @@ from app.database.session import get_music_db as get_db
 from app.modules.music.models import CatalogTrack, TransferJob
 from app.modules.music.schemas import TransferJobRead, TransferSummaryRead
 from app.modules.music.transfer import worker as transfer_worker
-from app.modules.music.transfer.service import ACTIVE_STATUSES, finish_job, import_library, pending_count
+from app.modules.music.transfer.service import (
+    ACTIVE_STATUSES,
+    finish_job,
+    import_library,
+    import_playlists,
+    pending_count,
+)
 from app.modules.music.transfer.sources import MAX_SOURCE_BYTES, SOURCES, AppleMusicCsvSource, LibraryParseError
 
 router = APIRouter(prefix="/transfer", tags=["music transfer"])
@@ -77,7 +83,9 @@ async def start_transfer(
     )
     db.add(job)
     db.flush()
-    import_library(db, job, parsed)
+    resolved = import_library(db, job, parsed)
+    if create_playlists and parsed.playlists:
+        import_playlists(db, user.id, parsed.playlists, resolved)
     if pending_count(db, job.id):
         job.status = "enriching"
     else:

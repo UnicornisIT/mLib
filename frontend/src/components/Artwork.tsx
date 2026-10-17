@@ -6,16 +6,19 @@ import { artworkUrl } from "@/lib/api";
 
 export function Artwork({
   id,
+  url,
   alt,
   size = 256,
   className = "",
 }: {
   id?: string | null;
+  /** External artwork (e.g. Apple catalog); a local file's artwork always wins. */
+  url?: string | null;
   alt: string;
   size?: 64 | 256 | 512;
   className?: string;
 }) {
-  const source = artworkUrl(id, size);
+  const source = artworkUrl(id, size) ?? url ?? null;
   if (!source) {
     return (
       <div className={`artwork-placeholder ${className}`} aria-label={`Обложка: ${alt}`}>
