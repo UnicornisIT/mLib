@@ -3,6 +3,7 @@
 import { BookOpenText, FileAudio2, FileText, Headphones, ImagePlus, UploadCloud, X } from "lucide-react";
 import Image from "next/image";
 import { ChangeEvent, DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { apiUrl } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import type { Book } from "@/lib/types";
 
@@ -11,7 +12,7 @@ type MediaType = "ebook" | "audiobook";
 function uploadBook(data: FormData, onProgress: (value: number) => void): Promise<Book> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
-    request.open("POST", "/api/books");
+    request.open("POST", apiUrl("/books"));
     request.withCredentials = true;
     request.upload.onprogress = (event) => event.lengthComputable && onProgress(Math.round(event.loaded / event.total * 100));
     request.onload = () => {

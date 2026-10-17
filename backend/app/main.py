@@ -2,6 +2,7 @@ import logging
 import secrets
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -62,17 +63,20 @@ def configure_logging() -> None:
 configure_logging()
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI):
+def apply_configured_library_path() -> None:
+    """Point settings.media_root at the library folder chosen during setup, if any."""
     try:
         with CoreSessionLocal() as db:
             configured_root = db.get(CoreSetting, "library_path")
             if configured_root and configured_root.value:
-                from pathlib import Path
-
                 settings.media_root = Path(configured_root.value).expanduser().resolve()
     except Exception:
         logging.getLogger(__name__).info("Application settings are not initialized yet")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    apply_configured_library_path()
     LocalMediaStorage(settings)
     try:
         yield

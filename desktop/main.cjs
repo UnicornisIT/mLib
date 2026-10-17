@@ -8,6 +8,10 @@ const path = require("node:path");
 
 const APP_ID = "app.mlib.desktop";
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// Backend startup includes database migrations (with a database-only safety backup),
+// so give it far more room than the UI server while the splash window shows progress.
+const BACKEND_START_TIMEOUT_MS = 10 * 60 * 1000;
+const FRONTEND_START_TIMEOUT_MS = 2 * 60 * 1000;
 const localAppData = process.env.LOCALAPPDATA || path.dirname(app.getPath("userData"));
 const dataRoot = path.join(localAppData, "mLib");
 const directories = {
@@ -23,6 +27,7 @@ app.setPath("userData", path.join(directories.config, "electron"));
 app.setAppUserModelId(APP_ID);
 
 let mainWindow = null;
+let splashWindow = null;
 let backendProcess = null;
 let frontendProcess = null;
 let backendPort = null;
@@ -303,7 +308,7 @@ async function startServices() {
     FFPROBE_PATH: path.join(resourcePath("tools"), "ffprobe.exe"),
   };
   backendProcess = spawnLogged(backendExecutable, [], { cwd: backendDirectory, env: backendEnvironment }, "backend");
-  await waitForUrl(`http://127.0.0.1:${backendPort}/health`, 60_000, backendProcess, "Backend");
+  await waitForUrl(`http://127.0.0.1:${backendPort}/health`, BACKEND_START_TIMEOUT_MS, backendProcess, "Backend");
 
   const frontendEnvironment = {
     ...process.env,
@@ -317,8 +322,45 @@ async function startServices() {
     cwd: path.dirname(frontendServer),
     env: frontendEnvironment,
   }, "frontend");
-  await waitForUrl(`http://127.0.0.1:${frontendPort}/`, 60_000, frontendProcess, "Интерфейс");
+  await waitForUrl(`http://127.0.0.1:${frontendPort}/`, FRONTEND_START_TIMEOUT_MS, frontendProcess, "Интерфейс");
   servicesStarted = true;
+}
+
+const SPLASH_HTML = `<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<style>
+  html,body{margin:0;height:100%;background:#111210;color:#e9e7df;font:15px "Segoe UI",sans-serif;-webkit-user-select:none}
+  body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+  .spinner{width:34px;height:34px;border:3px solid #3a3b36;border-top-color:#e9e7df;border-radius:50%;animation:spin 1s linear infinite}
+  small{color:#9a988f;max-width:300px;text-align:center;line-height:1.4}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){.spinner{animation-duration:3s}}
+</style></head>
+<body><strong>mLib запускается…</strong><div class="spinner" role="progressbar" aria-label="Загрузка"></div>
+<small>После обновления mLib может подготавливать базу данных. Это займёт немного времени.</small></body></html>`;
+
+function showSplash() {
+  splashWindow = new BrowserWindow({
+    width: 420,
+    height: 260,
+    frame: false,
+    resizable: false,
+    show: false,
+    backgroundColor: "#111210",
+    icon: app.isPackaged ? process.execPath : path.join(__dirname, "build", "icon.ico"),
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  splashWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  splashWindow.webContents.on("will-navigate", (event) => event.preventDefault());
+  splashWindow.once("ready-to-show", () => splashWindow?.show());
+  splashWindow.on("closed", () => { splashWindow = null; });
+  void splashWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(SPLASH_HTML)}`);
+}
+
+function closeSplash() {
+  if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy();
+  splashWindow = null;
 }
 
 function loadWindowState() {
@@ -367,7 +409,10 @@ function createWindow() {
     },
   });
   if (state.maximized) mainWindow.maximize();
-  mainWindow.once("ready-to-show", () => mainWindow?.show());
+  mainWindow.once("ready-to-show", () => {
+    mainWindow?.show();
+    closeSplash();
+  });
   mainWindow.on("close", saveWindowState);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https:\/\//i.test(url)) void shell.openExternal(url);
@@ -488,6 +533,9 @@ async function showStartupFailure(detail) {
     cancelId: 1,
   });
   if (result.response === 0) await shell.openPath(directories.logs);
+  // Close the splash only after the dialog: destroying the last window earlier would
+  // trigger window-all-closed and quit before the user sees the error.
+  closeSplash();
   app.quit();
 }
 
@@ -524,6 +572,7 @@ if (!lock) {
     try {
       ensureDirectories();
       registerIpc();
+      showSplash();
       await startServices();
       createWindow();
       configureAutoUpdater();

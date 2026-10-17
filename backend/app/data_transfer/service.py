@@ -316,6 +316,7 @@ def create_backup(
     *,
     reason: str = "manual",
     client_state: dict[str, Any] | None = None,
+    include_media: bool = True,
 ) -> Path:
     destination = (destination or _default_backup_path(settings)).expanduser().resolve()
     if destination.suffix.lower() != ".zip":
@@ -327,7 +328,8 @@ def create_backup(
         normalized_client_state = _normalize_client_state(client_state)
         for domain in DOMAINS:
             _sqlite_snapshot(_database_file(domain), root / "database" / f"{domain.name}.db")
-        _copy_media(settings.media_root, root / "media")
+        if include_media:
+            _copy_media(settings.media_root, root / "media")
         if normalized_client_state is not None:
             _write_json(root / "settings" / "client.json", normalized_client_state)
         inventory = _inventory(root)
@@ -340,6 +342,7 @@ def create_backup(
             "database_schema_heads": _schema_heads(),
             "created_at": _utc_now(),
             "reason": reason,
+            "media_included": include_media,
             "client_state": normalized_client_state is not None,
             "files": inventory,
         }
@@ -428,7 +431,7 @@ def _replace_media(incoming: Path, settings: Settings) -> None:
     shutil.rmtree(rollback, ignore_errors=True)
 
 
-def _restore_backup_extracted(root: Path, settings: Settings) -> None:
+def _restore_backup_extracted(root: Path, settings: Settings, *, include_media: bool = True) -> None:
     dispose_all_engines()
     staged: list[tuple[Path, Path]] = []
     for domain in DOMAINS:
@@ -444,7 +447,8 @@ def _restore_backup_extracted(root: Path, settings: Settings) -> None:
         os.replace(temporary, target)
         target.with_name(f"{target.name}-wal").unlink(missing_ok=True)
         target.with_name(f"{target.name}-shm").unlink(missing_ok=True)
-    _replace_media(root / "media", settings)
+    if include_media:
+        _replace_media(root / "media", settings)
 
 
 def _read_client_state(root: Path) -> dict[str, Any] | None:
@@ -468,11 +472,17 @@ def _restore_backup(
     settings.temp_root.mkdir(parents=True, exist_ok=True)
     with _operation_lock, tempfile.TemporaryDirectory(prefix="mlib-restore-", dir=settings.temp_root) as raw:
         root = Path(raw)
-        _extract_and_verify(source, root, "backup")
+        manifest = _extract_and_verify(source, root, "backup")
+        # Database-only backups (made before migrations) must leave the media library untouched.
+        include_media = manifest.get("media_included", True) is not False
         client_state = _read_client_state(root)
-        safety = create_backup(None, settings, reason="before-restore") if make_safety_backup else None
+        safety = (
+            create_backup(None, settings, reason="before-restore", include_media=include_media)
+            if make_safety_backup
+            else None
+        )
         try:
-            _restore_backup_extracted(root, settings)
+            _restore_backup_extracted(root, settings, include_media=include_media)
         except Exception:
             if safety:
                 restore_backup(safety, settings, make_safety_backup=False)
@@ -630,7 +640,9 @@ def prune_automatic_backups(settings: Settings, keep: int = 7) -> None:
 
 
 def automatic_migration_backup(settings: Settings) -> Path:
+    """Snapshot only the databases: migrations never touch media, and copying a large
+    media library here would block application startup for minutes."""
     destination = _default_backup_path(settings, "auto-before-migration")
-    backup = create_backup(destination, settings, reason="before-migration")
+    backup = create_backup(destination, settings, reason="before-migration", include_media=False)
     prune_automatic_backups(settings)
     return backup

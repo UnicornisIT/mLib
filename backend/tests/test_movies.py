@@ -299,3 +299,34 @@ def test_tracking_status_can_be_removed_from_profile(authenticated_client, monke
     assert authenticated_client.get("/api/movie/profile").json()["series_status_counts"]["planned"] == 0
 
     assert authenticated_client.delete(f"/api/movie/titles/{series['id']}/tracking").status_code == 204
+
+
+
+def test_resumed_upload_discards_bytes_left_by_an_interrupted_request(authenticated_client):
+    from app.core.config import get_settings
+    from app.database.session import MovieSessionLocal
+    from app.modules.movie.models import VideoUpload
+
+    content = b"0123456789"
+    created = authenticated_client.post(
+        "/api/movie/uploads", json={"filename": "Resume.Test.mkv", "size": len(content)}
+    )
+    assert created.status_code == 201
+    upload_id = created.json()["id"]
+
+    # A dropped connection can leave bytes on disk that were never committed to upload.offset.
+    with MovieSessionLocal() as db:
+        temp_path = db.get(VideoUpload, upload_id).temp_path
+    (get_settings().media_root / temp_path).write_bytes(b"01234")
+
+    resumed = authenticated_client.patch(
+        f"/api/movie/uploads/{upload_id}",
+        content=content,
+        headers={"Upload-Offset": "0", "Content-Type": "application/offset+octet-stream"},
+    )
+    assert resumed.status_code == 200
+    assert resumed.json()["status"] == "completed"
+
+    stream = authenticated_client.get(f"/api/movie/files/{resumed.json()['file_id']}/stream")
+    assert stream.status_code == 200
+    assert stream.content == content

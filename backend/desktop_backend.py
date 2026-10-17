@@ -48,6 +48,11 @@ def apply_migrations() -> None:
 
     requires_migration = any(current[name] != target[name] for name in MIGRATIONS)
     existing_library = any(revision is not None for revision in current.values())
+    if existing_library:
+        from app.main import apply_configured_library_path
+
+        # The backup manifest and any rollback must refer to the library folder chosen at setup.
+        apply_configured_library_path()
     safety_backup = automatic_migration_backup(settings) if requires_migration and existing_library else None
     try:
         for name, folder in MIGRATIONS.items():

@@ -6,19 +6,55 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: windows-desktop-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a run that may be publishing a release.
+  cancel-in-progress: false
+
+env:
+  IS_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Verify version sources
+        if: env.IS_RELEASE != 'true'
+        run: python scripts/check_release.py
+      - name: Verify release tag, versions and notes
+        if: env.IS_RELEASE == 'true'
+        run: python scripts/check_release.py --tag "$GITHUB_REF_NAME"
+      - name: Refuse to republish an existing release
+        if: env.IS_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          releases="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName --jq '.[].tagName')"
+          if grep -Fxq "$GITHUB_REF_NAME" <<<"$releases"; then
+            echo "::error::Release $GITHUB_REF_NAME already exists. Published releases are immutable; ship a new version."
+            exit 1
+          fi
+
+  ci:
+    needs: verify
+    uses: ./.github/workflows/ci.yml
+
   installer:
+    needs: [verify, ci]
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
           cache: pip
@@ -26,30 +62,20 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
             backend/requirements-desktop.txt
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
       - name: Enable pnpm
         run: corepack enable
-      - name: Verify release version
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
-        run: |
-          $packageVersion = (Get-Content -LiteralPath "desktop/package.json" -Raw | ConvertFrom-Json).version
-          $expectedTag = "v$packageVersion"
-          $actualTag = "${{ github.ref_name }}"
-          if ($actualTag -ne $expectedTag) {
-            throw "Release tag '$actualTag' must match desktop/package.json version '$expectedTag'."
-          }
       - name: Build installer
         shell: pwsh
         env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_LINK: ${{ env.IS_RELEASE == 'true' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ env.IS_RELEASE == 'true' && secrets.CSC_KEY_PASSWORD || '' }}
           MLIB_GITHUB_REPOSITORY: ${{ github.repository }}
         run: .\scripts\build-windows.ps1
       - name: Upload installer
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mLib-windows-x64
           path: |
@@ -59,66 +85,57 @@ jobs:
             dist/latest.yml
           if-no-files-found: error
           retention-days: 14
+
+  publish:
+    needs: installer
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/release-notes
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: mLib-windows-x64
+          path: dist
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag = "${{ github.ref_name }}"
-          $installer = Get-ChildItem -LiteralPath "dist" -Filter "mLib-Setup-*-x64.exe" |
-            Select-Object -First 1
-          if (-not $installer) {
-            throw "Windows installer was not found in dist."
-          }
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          shopt -s nullglob
+          installers=(dist/mLib-Setup-*-x64.exe)
+          if [ "${#installers[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one installer in dist, found ${#installers[@]}."
+            exit 1
+          fi
+          installer="${installers[0]}"
+          if [ "$(basename "$installer")" != "mLib-Setup-${tag#v}-x64.exe" ]; then
+            echo "::error::Installer $(basename "$installer") does not match tag $tag."
+            exit 1
+          fi
 
-          $checksum = Get-Item -LiteralPath "$($installer.FullName).sha256"
-          $blockmap = Get-Item -LiteralPath "$($installer.FullName).blockmap"
-          $updateManifest = Get-Item -LiteralPath "dist/latest.yml"
-          $releaseExists = gh release list --limit 1000 --json tagName |
-            ConvertFrom-Json |
-            Where-Object { $_.tagName -eq $tag }
-          if ($LASTEXITCODE -ne 0) {
-            throw "Could not read GitHub Releases."
-          }
+          # Re-check right before publishing: a release must never be replaced.
+          releases="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName --jq '.[].tagName')"
+          if grep -Fxq "$tag" <<<"$releases"; then
+            echo "::error::Release $tag already exists. Published releases are immutable; ship a new version."
+            exit 1
+          fi
 
-          $releaseNotes = ".github/release-notes/$tag.md"
-          if ($releaseExists) {
-            gh release upload $tag $installer.FullName $checksum.FullName `
-              $blockmap.FullName $updateManifest.FullName --clobber
-            if ($LASTEXITCODE -ne 0) {
-              throw "Could not replace GitHub Release assets."
-            }
-            $editArguments = @($tag)
-            if (Test-Path -LiteralPath $releaseNotes) {
-              $editArguments += @("--notes-file", $releaseNotes)
-            }
-            if ($tag.Contains("-")) {
-              $editArguments += "--prerelease"
-            }
-            if ($editArguments.Count -gt 1) {
-              gh release edit @editArguments
-            }
-          } else {
-            $releaseArguments = @(
-              $tag,
-              $installer.FullName,
-              $checksum.FullName,
-              $blockmap.FullName,
-              $updateManifest.FullName,
-              "--title", "mLib $tag",
-              "--verify-tag"
-            )
-            if (Test-Path -LiteralPath $releaseNotes) {
-              $releaseArguments += @("--notes-file", $releaseNotes)
-            } else {
-              $releaseArguments += "--generate-notes"
-            }
-            if ($tag.Contains("-")) {
-              $releaseArguments += "--prerelease"
-            }
-            gh release create @releaseArguments
-          }
-          if ($LASTEXITCODE -ne 0) {
-            throw "GitHub Release publication failed."
-          }
+          args=(
+            "$tag"
+            "$installer" "$installer.sha256" "$installer.blockmap" dist/latest.yml
+            --repo "$GITHUB_REPOSITORY"
+            --title "mLib $tag"
+            --notes-file ".github/release-notes/$tag.md"
+            --verify-tag
+          )
+          if [[ "$tag" == *-* ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${args[@]}"

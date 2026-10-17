@@ -1,3 +1,4 @@
+import json
 import zipfile
 from pathlib import Path
 
@@ -7,9 +8,11 @@ from sqlalchemy import func, select
 from app.core.config import get_settings
 from app.data_transfer.service import (
     DataTransferError,
+    automatic_migration_backup,
     create_backup,
     create_portable_export,
     import_portable_export,
+    restore_backup,
     restore_backup_with_client_state,
 )
 from app.database.session import BooksSessionLocal, GamesSessionLocal, WishesSessionLocal
@@ -159,3 +162,43 @@ def test_backup_rejects_invalid_client_state(authenticated_client, tmp_path: Pat
             settings,
             client_state={"version": 1, "theme": "system", "player": {"queue": [{}] * 501}},
         )
+
+
+def test_migration_backup_is_database_only_and_restore_keeps_media(authenticated_client, tmp_path: Path) -> None:
+    settings = desktop_settings(tmp_path)
+    media_file = settings.media_root / "movie" / "originals" / "ab" / "film.mkv"
+    media_file.parent.mkdir(parents=True)
+    media_file.write_bytes(b"large-video")
+    with WishesSessionLocal() as db:
+        db.add(
+            Wish(
+                id="wish-before",
+                owner_id="owner",
+                category="buy",
+                target_type="item",
+                title="До миграции",
+                normalized_title="до миграции",
+            )
+        )
+        db.commit()
+
+    backup = automatic_migration_backup(settings)
+    with zipfile.ZipFile(backup) as archive:
+        names = archive.namelist()
+        manifest = json.loads(archive.read("manifest.json"))
+    assert not any(name.startswith("media/") for name in names)
+    assert manifest["media_included"] is False
+
+    with WishesSessionLocal() as db:
+        db.execute(Wish.__table__.delete())
+        db.commit()
+    added_later = settings.media_root / "books" / "originals" / "new.epub"
+    added_later.parent.mkdir(parents=True)
+    added_later.write_bytes(b"new-book")
+
+    restore_backup(backup, settings, make_safety_backup=False)
+
+    with WishesSessionLocal() as db:
+        assert db.get(Wish, "wish-before") is not None
+    assert media_file.read_bytes() == b"large-video"
+    assert added_later.read_bytes() == b"new-book"
