@@ -1,9 +1,28 @@
 name: Windows Desktop
 
+# Releases are started by hand from main and never by pushing a tag: the tag v<version> only
+# comes into existence when the finished draft Release is published, so a failed build leaves no
+# tag behind and installed apps never see a release without update metadata.
 on:
   workflow_dispatch:
-  push:
-    tags: ["v*"]
+    inputs:
+      version:
+        description: "Version to release, without the v (for example 0.0.5-alpha). Empty: build only"
+        required: false
+        type: string
+      publish:
+        description: "Publish the GitHub Release (main only). Off: dry run, the installer stays an artifact"
+        required: false
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - .github/workflows/windows-desktop.yml
+      - scripts/build-windows.ps1
+      - scripts/check_release.py
+      - desktop/electron-builder.config.cjs
+      - desktop/package.json
+      - desktop/package-lock.json
 
 permissions:
   contents: read
@@ -14,7 +33,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IS_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+  VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
+  PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
 
 jobs:
   verify:
@@ -24,21 +44,39 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+      - name: Validate release request
+        if: env.PUBLISH == 'true'
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Releases are published from main only, not from $GITHUB_REF."
+            exit 1
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "::error::Set the version input to publish a release."
+            exit 1
+          fi
       - name: Verify version sources
-        if: env.IS_RELEASE != 'true'
+        if: env.VERSION == ''
         run: python scripts/check_release.py
-      - name: Verify release tag, versions and notes
-        if: env.IS_RELEASE == 'true'
-        run: python scripts/check_release.py --tag "$GITHUB_REF_NAME"
-      - name: Refuse to republish an existing release
-        if: env.IS_RELEASE == 'true'
+      - name: Verify release version, sources and notes
+        if: env.VERSION != ''
+        run: python scripts/check_release.py --tag "v$VERSION"
+      - name: Refuse to reuse an existing release or tag
+        if: env.VERSION != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          tag="v$VERSION"
           releases="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName --jq '.[].tagName')"
-          if grep -Fxq "$GITHUB_REF_NAME" <<<"$releases"; then
-            echo "::error::Release $GITHUB_REF_NAME already exists. Published releases are immutable; ship a new version."
+          if grep -Fxq "$tag" <<<"$releases"; then
+            echo "::error::Release $tag already exists. Published releases are immutable; ship a new version."
+            exit 1
+          fi
+          tags="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$tag" --jq '.[].ref')"
+          if grep -Fxq "refs/tags/$tag" <<<"$tags"; then
+            echo "::error::Tag $tag already exists. Published tags are immutable; ship a new version."
             exit 1
           fi
 
@@ -70,8 +108,8 @@ jobs:
       - name: Build installer
         shell: pwsh
         env:
-          CSC_LINK: ${{ env.IS_RELEASE == 'true' && secrets.CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ env.IS_RELEASE == 'true' && secrets.CSC_KEY_PASSWORD || '' }}
+          CSC_LINK: ${{ env.PUBLISH == 'true' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ env.PUBLISH == 'true' && secrets.CSC_KEY_PASSWORD || '' }}
           MLIB_GITHUB_REPOSITORY: ${{ github.repository }}
         run: .\scripts\build-windows.ps1
       - name: Upload installer
@@ -88,7 +126,7 @@ jobs:
 
   publish:
     needs: installer
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -107,7 +145,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          tag="$GITHUB_REF_NAME"
+          tag="v$VERSION"
+          repo="$GITHUB_REPOSITORY"
           shopt -s nullglob
           installers=(dist/mLib-Setup-*-x64.exe)
           if [ "${#installers[@]}" -ne 1 ]; then
@@ -115,27 +154,74 @@ jobs:
             exit 1
           fi
           installer="${installers[0]}"
-          if [ "$(basename "$installer")" != "mLib-Setup-${tag#v}-x64.exe" ]; then
-            echo "::error::Installer $(basename "$installer") does not match tag $tag."
+          if [ "$(basename "$installer")" != "mLib-Setup-$VERSION-x64.exe" ]; then
+            echo "::error::Installer $(basename "$installer") does not match version $VERSION."
             exit 1
           fi
+          assets=("$installer" "$installer.sha256" "$installer.blockmap" dist/latest.yml)
 
-          # Re-check right before publishing: a release must never be replaced.
-          releases="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName --jq '.[].tagName')"
+          tag_exists() {
+            gh api "repos/$repo/git/matching-refs/tags/$tag" --jq '.[].ref' | grep -Fxq "refs/tags/$tag"
+          }
+
+          # Re-check right before publishing, drafts included: a release must never be replaced.
+          releases="$(gh release list --repo "$repo" --limit 1000 --json tagName --jq '.[].tagName')"
           if grep -Fxq "$tag" <<<"$releases"; then
-            echo "::error::Release $tag already exists. Published releases are immutable; ship a new version."
+            echo "::error::Release $tag already exists (a leftover draft counts too). Published releases are immutable; ship a new version."
+            exit 1
+          fi
+          if tag_exists; then
+            echo "::error::Tag $tag already exists. Published tags are immutable; ship a new version."
             exit 1
           fi
 
-          args=(
-            "$tag"
-            "$installer" "$installer.sha256" "$installer.blockmap" dist/latest.yml
-            --repo "$GITHUB_REPOSITORY"
+          # 1. Draft: invisible to releases.atom and to electron-updater, and no tag yet.
+          create=(
+            "$tag" "${assets[@]}"
+            --repo "$repo"
+            --draft
+            --target "$GITHUB_SHA"
             --title "mLib $tag"
             --notes-file ".github/release-notes/$tag.md"
-            --verify-tag
           )
+          publish=(--draft=false --repo "$repo")
           if [[ "$tag" == *-* ]]; then
-            args+=(--prerelease)
+            create+=(--prerelease)
+          else
+            publish+=(--latest)
           fi
-          gh release create "${args[@]}"
+
+          published=false
+          # Only ever delete a release that is still a draft: it has no tag, nobody has seen it.
+          discard_draft() {
+            if [ "$published" = "true" ]; then
+              return
+            fi
+            if [ "$(gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft 2>/dev/null)" = "true" ]; then
+              echo "::warning::Deleting the unpublished draft $tag; no tag was created."
+              gh release delete "$tag" --repo "$repo" --yes || true
+            fi
+          }
+          trap discard_draft EXIT
+
+          gh release create "${create[@]}"
+          uploaded="$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets | length')"
+          if [ "$uploaded" -ne "${#assets[@]}" ]; then
+            echo "::error::Draft $tag has $uploaded assets, expected ${#assets[@]}."
+            exit 1
+          fi
+          if tag_exists; then
+            echo "::error::Tag $tag appeared while the draft was being prepared; refusing to attach the release to it."
+            exit 1
+          fi
+
+          # 2. Publish: the tag is created on $GITHUB_SHA at this moment, with every asset in place.
+          gh release edit "$tag" "${publish[@]}"
+          published=true
+
+          tagged="$(gh api "repos/$repo/git/matching-refs/tags/$tag" --jq ".[] | select(.ref == \"refs/tags/$tag\") | .object.sha")"
+          if [ "$tagged" != "$GITHUB_SHA" ]; then
+            echo "::error::Tag $tag points to '$tagged', expected $GITHUB_SHA. Do not move it; ship a new version."
+            exit 1
+          fi
+          echo "Published $tag from $GITHUB_SHA"

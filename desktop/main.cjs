@@ -8,6 +8,9 @@ const path = require("node:path");
 
 const APP_ID = "app.mlib.desktop";
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// A release whose update metadata is still being uploaded answers 404; look again soon.
+const UPDATE_PUBLISHING_RETRY_MS = 30 * 60 * 1000;
+const RELEASE_PUBLISHING_MESSAGE = "Новая версия ещё публикуется. Проверим снова через 30 минут.";
 // Backend startup includes database migrations (with a database-only safety backup),
 // so give it far more room than the UI server while the splash window shows progress.
 const BACKEND_START_TIMEOUT_MS = 10 * 60 * 1000;
@@ -38,6 +41,7 @@ let servicesStarted = false;
 let updateCheckInFlight = false;
 let updateDownloaded = false;
 let updateCheckTimer = null;
+let updateRetryTimer = null;
 let updateStatus = {
   enabled: false,
   state: "disabled",
@@ -84,15 +88,47 @@ function updaterLog(level, message) {
   log(`updater ${level}: ${typeof message === "string" ? message : JSON.stringify(message)}`);
 }
 
+// electron-updater reads the newest entry of releases.atom and then downloads latest.yml
+// (or alpha.yml) from it. A 404 there means that release has no update metadata yet: it is
+// still being published, not that the update service is broken.
+function isReleaseStillPublishing(error) {
+  const detail = error instanceof Error ? error.message : String(error);
+  const channelFileMissing = error?.code === "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND" || /Cannot find [\w.-]+\.yml in the latest release artifacts/.test(detail);
+  return channelFileMissing && /\b404\b/.test(detail);
+}
+
+function scheduleUpdateRetry() {
+  if (updateRetryTimer) return;
+  updateRetryTimer = setTimeout(() => {
+    updateRetryTimer = null;
+    void checkForUpdates();
+  }, UPDATE_PUBLISHING_RETRY_MS);
+  updateRetryTimer.unref?.();
+}
+
+function handleUpdaterError(error, prefix, message) {
+  const detail = error instanceof Error ? error.message : String(error);
+  if (isReleaseStillPublishing(error)) {
+    log(`${prefix}: release is still being published, retrying in ${UPDATE_PUBLISHING_RETRY_MS / 60_000} minutes: ${detail}`);
+    scheduleUpdateRetry();
+    setUpdateStatus({ enabled: true, state: "idle", progress: null, message: RELEASE_PUBLISHING_MESSAGE });
+    return;
+  }
+  log(`${prefix}: ${detail}`);
+  setUpdateStatus({ enabled: true, state: "error", progress: null, message });
+}
+
 async function checkForUpdates() {
   if (!updateStatus.enabled || updateCheckInFlight) return updateStatus;
   updateCheckInFlight = true;
+  if (updateRetryTimer) {
+    clearTimeout(updateRetryTimer);
+    updateRetryTimer = null;
+  }
   try {
     await autoUpdater.checkForUpdates();
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    log(`Updater check failed: ${detail}`);
-    setUpdateStatus({ state: "error", progress: null, message: "Не удалось проверить обновления. Проверьте подключение к интернету." });
+    handleUpdaterError(error, "Updater check failed", "Не удалось проверить обновления. Проверьте подключение к интернету.");
   } finally {
     updateCheckInFlight = false;
   }
@@ -158,9 +194,7 @@ function configureAutoUpdater() {
     });
   });
   autoUpdater.on("error", (error) => {
-    const detail = error instanceof Error ? error.message : String(error);
-    log(`Updater error: ${detail}`);
-    setUpdateStatus({ enabled: true, state: "error", progress: null, message: "Не удалось получить обновление. Попробуйте позже." });
+    handleUpdaterError(error, "Updater error", "Не удалось получить обновление. Попробуйте позже.");
   });
 
   setUpdateStatus({ enabled: true, state: "idle", message: "Обновления проверяются автоматически" });
@@ -588,6 +622,7 @@ if (!lock) {
     if (shuttingDown) return;
     event.preventDefault();
     if (updateCheckTimer) clearInterval(updateCheckTimer);
+    if (updateRetryTimer) clearTimeout(updateRetryTimer);
     void stopServices().finally(() => app.quit());
   });
 }
