@@ -289,3 +289,27 @@ def test_transfer_can_create_playlists_from_playlist_column(authenticated_client
     assert all(item["track"] is None for item in road["items"])
     ev = authenticated_client.get(f"/api/music/playlists/{playlists['Ev']['id']}").json()
     assert [item["catalog_track"]["apple_track_id"] for item in ev["items"]] == ["1003", "1004", "1001"]
+
+
+def test_startup_resumes_interrupted_transfers(
+    authenticated_client: TestClient, db: Session, no_background_worker: list[bool]
+) -> None:
+    transfer_worker.resume_pending_jobs()
+    assert no_background_worker == []
+
+    job_id = upload(authenticated_client).json()["id"]
+    no_background_worker.clear()
+    transfer_worker.resume_pending_jobs()
+    assert no_background_worker == [True]
+
+    with TestClient(authenticated_client.app):
+        pass
+    assert no_background_worker == [True, True]
+    assert db.get(TransferJob, job_id).status == "enriching"
+
+
+def test_storefronts_setting_accepts_comma_separated_values() -> None:
+    from app.core.config import Settings
+
+    assert Settings(itunes_storefronts=" RU, us ,tr ").itunes_storefronts == ["ru", "us", "tr"]
+    assert Settings().itunes_storefronts == ["ru", "us", "tr"]
