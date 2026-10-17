@@ -33,7 +33,9 @@ router = APIRouter(tags=["music tracks"])
 
 def get_track_or_404(db: Session, track_id: str) -> Track:
     track = db.scalar(
-        select(Track).where(Track.id == track_id).options(selectinload(Track.artist), selectinload(Track.album))
+        select(Track)
+        .where(Track.id == track_id)
+        .options(selectinload(Track.artist), selectinload(Track.album), selectinload(Track.catalog_track))
     )
     if track is None:
         raise HTTPException(status_code=404, detail="Трек не найден")

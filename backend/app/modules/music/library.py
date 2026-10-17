@@ -12,8 +12,8 @@ from app.modules.music.artwork import save_artwork
 from app.modules.music.metadata import NormalizedTrackMetadata, extract_metadata, normalize_identity
 from app.modules.music.models import Album, Artist, CatalogTrack, Favorite, MusicSetting, Track
 from app.modules.music.quality import attention_status, metadata_issues, needs_attention
-from app.modules.music.schemas import AlbumBrief, ArtistBrief, CatalogTrackRead, TrackRead
-from app.modules.music.transfer.itunes import sized_artwork_url
+from app.modules.music.schemas import AlbumBrief, ArtistBrief, CatalogTrackBrief, CatalogTrackRead, TrackRead
+from app.modules.music.transfer.itunes import sized_artwork_url, spotify_search_url
 from app.storage.service import LocalMediaStorage, StagedFile
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ class DuplicateTrackError(ValueError):
 def track_query(user_id: str):
     return (
         select(Track)
-        .options(selectinload(Track.artist), selectinload(Track.album))
+        .options(selectinload(Track.artist), selectinload(Track.album), selectinload(Track.catalog_track))
         .add_columns(
             select(Favorite.track_id)
             .where(Favorite.track_id == Track.id, Favorite.user_id == user_id)
@@ -72,6 +72,7 @@ def serialize_track(track: Track, favorite: bool = False) -> TrackRead:
         sample_rate=track.sample_rate,
         channels=track.channels,
         artwork_id=track.artwork_id or (track.album.artwork_id if track.album else None),
+        catalog=catalog_brief(track.catalog_track) if track.catalog_track else None,
         favorite=favorite,
         needs_attention=needs_attention(track, issues),
         metadata_status=attention_status(track, issues),
@@ -83,9 +84,8 @@ def serialize_track(track: Track, favorite: bool = False) -> TrackRead:
     )
 
 
-def serialize_catalog_track(item: CatalogTrack) -> CatalogTrackRead:
-    track = item.track
-    return CatalogTrackRead(
+def catalog_brief(item: CatalogTrack) -> CatalogTrackBrief:
+    return CatalogTrackBrief(
         id=item.id,
         apple_track_id=item.apple_track_id,
         isrc=item.isrc,
@@ -95,6 +95,15 @@ def serialize_catalog_track(item: CatalogTrack) -> CatalogTrackRead:
         year=item.year,
         duration_ms=item.duration_ms,
         artwork_url=sized_artwork_url(item.artwork_url),
+        apple_music_url=item.apple_url,
+        spotify_url=spotify_search_url(item.artist_name, item.title),
+    )
+
+
+def serialize_catalog_track(item: CatalogTrack) -> CatalogTrackRead:
+    track = item.track
+    return CatalogTrackRead(
+        **catalog_brief(item).model_dump(),
         enrich_status=item.enrich_status,
         has_file=track is not None,
         track_id=track.id if track else None,

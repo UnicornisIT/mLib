@@ -22,7 +22,9 @@ class AlbumBrief(BaseModel):
     artwork_id: str | None = None
 
 
-class CatalogTrackRead(BaseModel):
+class CatalogTrackBrief(BaseModel):
+    """Catalog data shown for a file linked to a catalog track; the file's own tags stay untouched."""
+
     id: str
     apple_track_id: str
     isrc: str | None = None
@@ -31,7 +33,14 @@ class CatalogTrackRead(BaseModel):
     album_title: str | None = None
     year: int | None = None
     duration_ms: int | None = None
+    # Apple artwork is only linked, never downloaded; artwork embedded in the file takes priority.
     artwork_url: str | None = None
+    apple_music_url: str | None = None
+    # Search link: Spotify ids are not part of the Apple export.
+    spotify_url: str
+
+
+class CatalogTrackRead(CatalogTrackBrief):
     enrich_status: Literal["pending", "enriched", "not_found", "error"]
     has_file: bool
     track_id: str | None = None
@@ -59,6 +68,7 @@ class TrackRead(BaseModel):
     sample_rate: int | None = None
     channels: int | None = None
     artwork_id: str | None = None
+    catalog: CatalogTrackBrief | None = None
     favorite: bool = False
     needs_attention: bool = False
     metadata_status: Literal["complete", "incomplete", "critical", "reviewed"] = "complete"

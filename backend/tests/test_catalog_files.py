@@ -211,3 +211,42 @@ def test_folder_import_links_catalog_tracks(db: Session, tmp_path: Path) -> None
     db.expire_all()
     assert db.query(Track).filter_by(catalog_track_id=card.id).count() == 1
     assert db.query(Track).filter(Track.catalog_track_id.is_(None)).count() == 2
+
+
+def test_linked_track_exposes_catalog_data_without_touching_tags(
+    authenticated_client: TestClient, db: Session, tmp_path: Path
+) -> None:
+    card = add_card(db, "7001", "Искала", "Земфира", isrc="RUA119900001", duration_ms=215000)
+    card.apple_url = "https://music.apple.com/ru/album/x/1?i=7001"
+    card.artwork_url = "https://is1-ssl.mzstatic.com/image/thumb/Music/a/100x100bb.jpg"
+    db.commit()
+    path = make_wav(tmp_path / "rip.wav", title="track01", artist="Unknown artist")
+    track_id = authenticated_client.post(
+        f"/api/music/transfer/tracks/{card.id}/file", files={"file": (path.name, path.read_bytes(), "audio/wav")}
+    ).json()["track"]["id"]
+
+    track = authenticated_client.get(f"/api/music/tracks/{track_id}").json()
+    assert track["title"] == "track01"
+    assert track["artist"]["name"] == "Unknown artist"
+    assert track["artwork_id"] is None
+    catalog = track["catalog"]
+    assert (catalog["title"], catalog["artist_name"], catalog["album_title"]) == (
+        "Искала",
+        "Земфира",
+        "Искала - Single",
+    )
+    assert catalog["artwork_url"] == "https://is1-ssl.mzstatic.com/image/thumb/Music/a/600x600bb.jpg"
+    assert catalog["apple_music_url"] == "https://music.apple.com/ru/album/x/1?i=7001"
+    assert (
+        catalog["spotify_url"]
+        == "https://open.spotify.com/search/%D0%97%D0%B5%D0%BC%D1%84%D0%B8%D1%80%D0%B0%20%D0%98%D1%81%D0%BA%D0%B0%D0%BB%D0%B0"
+    )
+    listed = authenticated_client.get("/api/music/tracks").json()["items"][0]
+    assert listed["catalog"]["id"] == card.id
+
+    no_file = add_card(db, "7002", "Без файла", "Земфира")
+    cards = {item["id"]: item for item in authenticated_client.get("/api/music/transfer/tracks").json()["items"]}
+    assert cards[card.id]["has_file"] is True and cards[card.id]["track_id"] == track_id
+    assert cards[no_file.id]["has_file"] is False
+    assert cards[no_file.id]["apple_music_url"] is None
+    assert cards[no_file.id]["spotify_url"].startswith("https://open.spotify.com/search/")

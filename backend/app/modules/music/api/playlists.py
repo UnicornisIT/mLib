@@ -30,8 +30,10 @@ def playlist_query():
         .options(
             selectinload(Playlist.items).selectinload(PlaylistTrack.track).selectinload(Track.artist),
             selectinload(Playlist.items).selectinload(PlaylistTrack.track).selectinload(Track.album),
+            selectinload(Playlist.items).selectinload(PlaylistTrack.track).selectinload(Track.catalog_track),
             catalog_file.selectinload(Track.artist),
             catalog_file.selectinload(Track.album),
+            catalog_file.selectinload(Track.catalog_track),
         )
     )
 

@@ -29,6 +29,7 @@ export type Track = {
   sample_rate: number | null;
   channels: number | null;
   artwork_id: string | null;
+  catalog?: CatalogTrackBrief | null;
   favorite: boolean;
   needs_attention: boolean;
   metadata_status: "complete" | "incomplete" | "critical" | "reviewed";
@@ -110,7 +111,7 @@ export type ImportJob = {
   current_file: string | null;
   error_message: string | null;
 };
-export type CatalogTrack = {
+export type CatalogTrackBrief = {
   id: string;
   apple_track_id: string;
   isrc: string | null;
@@ -120,6 +121,10 @@ export type CatalogTrack = {
   year: number | null;
   duration_ms: number | null;
   artwork_url: string | null;
+  apple_music_url: string | null;
+  spotify_url: string;
+};
+export type CatalogTrack = CatalogTrackBrief & {
   enrich_status: "pending" | "enriched" | "not_found" | "error";
   has_file: boolean;
   track_id: string | null;
