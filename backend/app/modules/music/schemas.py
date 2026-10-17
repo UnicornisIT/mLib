@@ -170,6 +170,8 @@ class UploadResult(BaseModel):
     status: str
     detail: str
     track: TrackRead | None = None
+    catalog_track_id: str | None = None
+    catalog_candidates: int = 0
 
 
 class ImportRequest(BaseModel):
@@ -185,6 +187,8 @@ class ImportJobRead(BaseModel):
     added: int = 0
     skipped: int = 0
     errors: int = 0
+    linked: int = 0
+    ambiguous_track_ids: list[str] = Field(default_factory=list)
     current_file: str | None = None
     error_message: str | None = None
 
@@ -311,3 +315,22 @@ class TransferSummaryRead(BaseModel):
     enriched: int
     not_found: int
     pending: int
+
+
+class CatalogTrackPage(BaseModel):
+    items: list[CatalogTrackRead]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
+class CatalogFileLink(BaseModel):
+    track_id: str
+
+
+class CatalogFileResult(BaseModel):
+    status: Literal["added", "linked_existing"]
+    detail: str
+    catalog_track: CatalogTrackRead
+    track: TrackRead

@@ -104,7 +104,7 @@ def test_library_transfer_migration_keeps_existing_music_data(tmp_path: Path) ->
 
     _music_alembic(env, "upgrade", "head")
     assert _legacy_rows(database) == before
-    assert "catalog_track_id" in _columns(database, "music_tracks")
+    assert {"catalog_track_id", "isrc"} <= _columns(database, "music_tracks")
     assert {"apple_track_id", "isrc", "enrich_status"} <= _columns(database, "music_catalog_tracks")
     assert {"status", "rows_total", "not_found"} <= _columns(database, "music_transfer_jobs")
 
@@ -142,7 +142,7 @@ def test_library_transfer_migration_keeps_existing_music_data(tmp_path: Path) ->
     assert _legacy_rows(database)["tracks"] == before["tracks"]
     assert _legacy_rows(database)["favorites"] == before["favorites"]
     assert _legacy_rows(database)["items"] == [*before["items"], ("item-2", "playlist-1", "track-1", 1)]
-    assert "catalog_track_id" not in _columns(database, "music_tracks")
+    assert not {"catalog_track_id", "isrc"} & _columns(database, "music_tracks")
     assert "catalog_track_id" not in _columns(database, "music_playlist_tracks")
     _music_alembic(env, "upgrade", "head")
     assert _legacy_rows(database)["favorites"] == before["favorites"]

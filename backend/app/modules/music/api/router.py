@@ -5,10 +5,12 @@ from app.modules.music.api.imports import router as imports_router
 from app.modules.music.api.playlists import router as playlists_router
 from app.modules.music.api.tracks import router as tracks_router
 from app.modules.music.api.transfer import router as transfer_router
+from app.modules.music.api.transfer_tracks import router as transfer_tracks_router
 
 router = APIRouter(prefix="/music")
 router.include_router(tracks_router)
 router.include_router(catalog_router)
 router.include_router(playlists_router)
 router.include_router(imports_router)
+router.include_router(transfer_tracks_router)
 router.include_router(transfer_router)

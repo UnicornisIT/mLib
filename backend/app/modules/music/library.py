@@ -156,6 +156,7 @@ def import_staged_file(
     storage: LocalMediaStorage,
     settings: Settings,
     source_path: str | None = None,
+    catalog_track_id: str | None = None,
 ) -> Track:
     duplicate = find_duplicate(db, staged.sha256, staged.size)
     if duplicate:
@@ -210,6 +211,8 @@ def import_staged_file(
             file_size=staged.size,
             file_hash=staged.sha256,
             format=metadata.format,
+            isrc=metadata.isrc,
+            catalog_track_id=catalog_track_id,
             codec=metadata.codec,
             bitrate=metadata.bitrate,
             sample_rate=metadata.sample_rate,

@@ -110,6 +110,7 @@ class Track(MusicBase):
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     file_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     format: Mapped[str] = mapped_column(String(32), nullable=False)
+    isrc: Mapped[str | None] = mapped_column(String(32), index=True)
     codec: Mapped[str | None] = mapped_column(String(80))
     bitrate: Mapped[int | None] = mapped_column(Integer)
     sample_rate: Mapped[int | None] = mapped_column(Integer)

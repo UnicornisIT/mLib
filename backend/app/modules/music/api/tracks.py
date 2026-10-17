@@ -24,6 +24,7 @@ from app.modules.music.library import (
 from app.modules.music.models import Album, Artist, Artwork, Favorite, Track
 from app.modules.music.quality import attention_filter
 from app.modules.music.schemas import MetadataAttentionSummary, Page, TrackRead, TrackUpdate, UploadResult
+from app.modules.music.transfer.matching import link_imported_file
 from app.storage.service import LocalMediaStorage
 
 logger = logging.getLogger(__name__)
@@ -302,8 +303,16 @@ async def upload_tracks(
         try:
             staged = await storage.stage_upload(upload)
             track = await run_in_threadpool(import_staged_file, db, staged, storage, settings)
+            match = link_imported_file(db, track)
             results.append(
-                UploadResult(filename=filename, status="added", detail="Добавлено", track=serialize_track(track))
+                UploadResult(
+                    filename=filename,
+                    status="added",
+                    detail="Добавлено",
+                    track=serialize_track(track),
+                    catalog_track_id=track.catalog_track_id,
+                    catalog_candidates=len(match.candidates),
+                )
             )
             logger.info("Uploaded track %s", filename)
         except DuplicateTrackError as exc:

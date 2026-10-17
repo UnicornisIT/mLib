@@ -1,7 +1,7 @@
 import logging
 import threading
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from sqlalchemy import select
@@ -10,6 +10,7 @@ from app.core.config import Settings
 from app.database.session import MusicSessionLocal
 from app.modules.music.library import DuplicateTrackError, import_staged_file
 from app.modules.music.models import Track
+from app.modules.music.transfer.matching import link_imported_file
 from app.storage.service import LocalMediaStorage
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,8 @@ class ImportJob:
     added: int = 0
     skipped: int = 0
     errors: int = 0
+    linked: int = 0
+    ambiguous_track_ids: list[str] = field(default_factory=list)
     current_file: str | None = None
     error_message: str | None = None
 
@@ -51,6 +54,15 @@ class ImportJobRegistry:
 
 
 jobs = ImportJobRegistry()
+
+
+def link_catalog_track(db, track: Track, job: ImportJob) -> None:
+    """Attaches the imported file to its catalog track; ambiguous files wait for a manual choice."""
+    match = link_imported_file(db, track)
+    if match.catalog_track is not None:
+        job.linked += 1
+    elif match.candidates:
+        job.ambiguous_track_ids.append(track.id)
 
 
 def scan_directory(job_id: str, root: Path, settings: Settings) -> None:
@@ -80,8 +92,9 @@ def scan_directory(job_id: str, root: Path, settings: Settings) -> None:
                         job.skipped += 1
                     else:
                         staged = storage.stage_existing(source)
-                        import_staged_file(db, staged, storage, settings, source_path=str(source))
+                        track = import_staged_file(db, staged, storage, settings, source_path=str(source))
                         job.added += 1
+                        link_catalog_track(db, track, job)
                 except DuplicateTrackError:
                     job.skipped += 1
                 except Exception:

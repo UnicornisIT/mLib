@@ -45,6 +45,7 @@ class NormalizedTrackMetadata:
     artwork: EmbeddedArtwork | None
     title_from_filename: bool = False
     artist_from_fallback: bool = False
+    isrc: str | None = None
 
 
 def normalize_identity(value: str) -> str:
@@ -76,6 +77,15 @@ def _year(value: Any) -> int | None:
     return number if number is not None and 0 <= number <= 9999 else None
 
 
+def _isrc(value: Any) -> str | None:
+    if isinstance(value, list | tuple):
+        value = value[0] if value else None
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="ignore")
+    text = re.sub(r"[\s-]+", "", str(value or "")).upper()
+    return text if re.fullmatch(r"[A-Z]{2}[A-Z0-9]{3}\d{7}", text) else None
+
+
 def _id3_text(tags: ID3, key: str) -> str | None:
     frame = tags.get(key)
     return _first(getattr(frame, "text", None))
@@ -101,6 +111,7 @@ def _from_id3(tags: ID3) -> tuple[dict[str, Any], EmbeddedArtwork | None]:
             "composer": _id3_text(tags, "TCOM"),
             "copyright": _id3_text(tags, "TCOP"),
             "comment": _first(getattr(comments[0], "text", None)) if comments else None,
+            "isrc": _id3_text(tags, "TSRC"),
         },
         artwork,
     )
@@ -129,6 +140,7 @@ def _from_mp4(audio: MP4) -> tuple[dict[str, Any], EmbeddedArtwork | None]:
             "composer": _first(tags.get("\xa9wrt")),
             "copyright": _first(tags.get("cprt")),
             "comment": _first(tags.get("\xa9cmt")),
+            "isrc": _isrc(tags.get("----:com.apple.iTunes:ISRC")),
         },
         artwork,
     )
@@ -153,6 +165,7 @@ def _from_vorbis(audio: Any) -> tuple[dict[str, Any], EmbeddedArtwork | None]:
             "composer": _first(tags.get("composer")),
             "copyright": _first(tags.get("copyright")),
             "comment": _first(tags.get("comment") or tags.get("description")),
+            "isrc": _first(tags.get("isrc")),
         },
         artwork,
     )
@@ -253,4 +266,5 @@ def extract_metadata(
         artwork=artwork,
         title_from_filename=embedded_title is None,
         artist_from_fallback=embedded_artist is None,
+        isrc=_isrc(tags.get("isrc")),
     )
