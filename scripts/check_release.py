@@ -1,4 +1,6 @@
-"""Check that every release version source agrees, optionally against a Git tag.
+"""Check that every release version source agrees, optionally against a release tag.
+
+The tag does not have to exist: the release workflow creates it only when it publishes the Release.
 
 Usage:
     python scripts/check_release.py                 # versions must match each other
