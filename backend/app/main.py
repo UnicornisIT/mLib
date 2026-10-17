@@ -32,6 +32,7 @@ from app.modules.collections.api import router as collections_router
 from app.modules.games.api import router as games_router
 from app.modules.movie.api.router import router as movie_router
 from app.modules.music.api.router import router as music_router
+from app.modules.music.transfer.worker import resume_pending_jobs
 from app.modules.wishes.api import router as wishes_router
 from app.settings.api import router as settings_router
 from app.settings.models import CoreSetting
@@ -78,6 +79,7 @@ def apply_configured_library_path() -> None:
 async def lifespan(_: FastAPI):
     apply_configured_library_path()
     LocalMediaStorage(settings)
+    resume_pending_jobs()
     try:
         yield
     finally:

@@ -258,3 +258,32 @@ class SearchRead(BaseModel):
     tracks: list[TrackRead]
     albums: list[AlbumRead]
     artists: list[ArtistRead]
+
+
+class TransferJobRead(BaseModel):
+    id: str
+    source: str
+    filename: str
+    status: Literal["queued", "enriching", "completed", "failed", "cancelled"]
+    storefronts: list[str]
+    create_playlists: bool
+    rows_total: int
+    unique_total: int
+    added: int
+    existing: int
+    enriched: int
+    not_found: int
+    errors: int
+    invalid_rows: int
+    pending: int
+    error_message: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    finished_at: datetime | None = None
+
+
+class TransferSummaryRead(BaseModel):
+    total: int
+    enriched: int
+    not_found: int
+    pending: int

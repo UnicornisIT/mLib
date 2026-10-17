@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     ffprobe_path: str = "ffprobe"
     tmdb_api_token: str | None = None
     movie_metadata_refresh_hours: int = 24
+    itunes_lookup_enabled: bool = True
+    itunes_storefronts: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["ru", "us", "tr"])
     supported_audio_extensions: tuple[str, ...] = (
         ".mp3",
         ".flac",
@@ -51,6 +53,13 @@ class Settings(BaseSettings):
         ".wav",
         ".opus",
     )
+
+    @field_validator("itunes_storefronts", mode="before")
+    @classmethod
+    def parse_storefronts(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [item.strip().lower() for item in value.split(",") if item.strip()]
+        return value
 
     @field_validator("cors_origins", mode="before")
     @classmethod

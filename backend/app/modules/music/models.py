@@ -192,6 +192,7 @@ class TransferJob(MusicBase):
     enriched: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     not_found: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     errors: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    invalid_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(Text)
     worker_token: Mapped[str | None] = mapped_column(String(36))
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -30,6 +30,7 @@ def upgrade() -> None:
             sa.Column("enriched", sa.Integer(), nullable=False),
             sa.Column("not_found", sa.Integer(), nullable=False),
             sa.Column("errors", sa.Integer(), nullable=False),
+            sa.Column("invalid_rows", sa.Integer(), nullable=False),
             sa.Column("error_message", sa.Text()),
             sa.Column("worker_token", sa.String(36)),
             sa.Column("heartbeat_at", sa.DateTime(timezone=True)),
@@ -72,9 +73,7 @@ def upgrade() -> None:
         op.create_index(
             "idx_music_catalog_tracks_identity", "music_catalog_tracks", ["normalized_artist", "normalized_title"]
         )
-        op.create_index(
-            "idx_music_catalog_tracks_enrich", "music_catalog_tracks", ["transfer_job_id", "enrich_status"]
-        )
+        op.create_index("idx_music_catalog_tracks_enrich", "music_catalog_tracks", ["transfer_job_id", "enrich_status"])
 
     # Plain ADD COLUMN keeps existing rows in place: rebuilding music_tracks on SQLite with
     # foreign keys enabled would cascade-delete favorites and playlist items.
