@@ -114,6 +114,9 @@ class Track(MusicBase):
     sample_rate: Mapped[int | None] = mapped_column(Integer)
     channels: Mapped[int | None] = mapped_column(Integer)
     artwork_id: Mapped[str | None] = mapped_column(ForeignKey("music_artwork.id", ondelete="SET NULL"))
+    catalog_track_id: Mapped[str | None] = mapped_column(
+        ForeignKey("music_catalog_tracks.id", ondelete="SET NULL"), unique=True, index=True
+    )
     play_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_played_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     title_from_filename: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -127,7 +130,76 @@ class Track(MusicBase):
     artist: Mapped[Artist] = relationship(back_populates="tracks")
     album: Mapped[Album | None] = relationship(back_populates="tracks")
     artwork: Mapped[Artwork | None] = relationship()
+    catalog_track: Mapped["CatalogTrack | None"] = relationship(back_populates="track")
     favorited_by: Mapped[list["Favorite"]] = relationship(back_populates="track", cascade="all, delete-orphan")
+
+
+class CatalogTrack(MusicBase):
+    """A track known from an external library export, with or without a local file."""
+
+    __tablename__ = "music_catalog_tracks"
+    __table_args__ = (
+        Index("idx_music_catalog_tracks_identity", "normalized_artist", "normalized_title"),
+        Index("idx_music_catalog_tracks_enrich", "transfer_job_id", "enrich_status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4)
+    apple_track_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    isrc: Mapped[str | None] = mapped_column(String(32), index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    artist_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    album_title: Mapped[str | None] = mapped_column(String(500))
+    normalized_title: Mapped[str] = mapped_column(String(500), nullable=False)
+    normalized_artist: Mapped[str] = mapped_column(String(500), nullable=False)
+    collection_id: Mapped[str | None] = mapped_column(String(32))
+    apple_url: Mapped[str | None] = mapped_column(Text)
+    artwork_url: Mapped[str | None] = mapped_column(Text)
+    year: Mapped[int | None] = mapped_column(Integer)
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    storefront: Mapped[str | None] = mapped_column(String(8))
+    source: Mapped[str] = mapped_column(String(40), nullable=False, default="apple_music_csv")
+    transfer_job_id: Mapped[str | None] = mapped_column(
+        ForeignKey("music_transfer_jobs.id", ondelete="SET NULL")
+    )
+    enrich_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    enrich_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    enriched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    track: Mapped[Track | None] = relationship(back_populates="catalog_track", uselist=False)
+
+
+class TransferJob(MusicBase):
+    """Persistent state of a library transfer, so enrichment survives restarts."""
+
+    __tablename__ = "music_transfer_jobs"
+    __table_args__ = (Index("idx_music_transfer_jobs_owner_created", "owner_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4)
+    owner_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source: Mapped[str] = mapped_column(String(40), nullable=False)
+    filename: Mapped[str] = mapped_column(String(1000), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued", index=True)
+    storefronts: Mapped[str] = mapped_column(String(80), nullable=False, default="ru,us,tr")
+    create_playlists: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    rows_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unique_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    added: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    existing: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    enriched: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    not_found: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    errors: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    worker_token: Mapped[str | None] = mapped_column(String(36))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Favorite(MusicBase):

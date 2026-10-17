@@ -11,7 +11,18 @@ from app.modules.movie.models import (
     VideoUpload,
     WatchProgress,
 )
-from app.modules.music.models import Album, Artist, Artwork, Favorite, MusicSetting, Playlist, PlaylistTrack, Track
+from app.modules.music.models import (
+    Album,
+    Artist,
+    Artwork,
+    CatalogTrack,
+    Favorite,
+    MusicSetting,
+    Playlist,
+    PlaylistTrack,
+    Track,
+    TransferJob,
+)
 from app.modules.wishes.models import Wish
 from app.settings.models import CoreSetting
 
@@ -20,6 +31,7 @@ __all__ = [
     "Artist",
     "Artwork",
     "Book",
+    "CatalogTrack",
     "Collection",
     "CustomField",
     "CoreSetting",
@@ -38,6 +50,7 @@ __all__ = [
     "Track",
     "Tag",
     "TitleTracking",
+    "TransferJob",
     "User",
     "VideoFile",
     "VideoUpload",
