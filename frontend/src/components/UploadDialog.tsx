@@ -2,6 +2,7 @@
 
 import { UploadCloud, X } from "lucide-react";
 import { ChangeEvent, DragEvent, useRef, useState } from "react";
+import { apiUrl } from "@/lib/api";
 import type { UploadResult } from "@/lib/types";
 
 type FileState = { file: File; progress: number; status: "ready" | "uploading" | "done" | "error"; detail?: string };
@@ -11,7 +12,7 @@ function uploadOne(item: FileState, onProgress: (value: number) => void): Promis
     const request = new XMLHttpRequest();
     const body = new FormData();
     body.append("files", item.file);
-    request.open("POST", "/api/music/upload");
+    request.open("POST", apiUrl("/music/upload"));
     request.withCredentials = true;
     request.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));

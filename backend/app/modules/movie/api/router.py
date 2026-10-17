@@ -711,15 +711,24 @@ async def append_upload(
         raise HTTPException(status_code=409, detail=f"Ожидалось смещение {upload.offset}")
     storage = MovieStorage(settings)
     path = storage.managed(upload.temp_path)
+    path.touch(exist_ok=True)
     written = 0
-    with path.open("ab") as output:
-        async for chunk in request.stream():
-            if not chunk:
-                continue
-            if upload.offset + written + len(chunk) > upload.total_size:
-                raise HTTPException(status_code=413, detail="Получено больше данных, чем заявлено")
-            output.write(chunk)
-            written += len(chunk)
+    with path.open("r+b") as output:
+        # upload.offset is the source of truth: drop bytes an interrupted request left behind.
+        output.seek(upload.offset)
+        output.truncate()
+        try:
+            async for chunk in request.stream():
+                if not chunk:
+                    continue
+                if upload.offset + written + len(chunk) > upload.total_size:
+                    raise HTTPException(status_code=413, detail="Получено больше данных, чем заявлено")
+                output.write(chunk)
+                written += len(chunk)
+        except BaseException:
+            output.seek(upload.offset)
+            output.truncate()
+            raise
     upload.offset += written
     upload.updated_at = utcnow()
     db.commit()
