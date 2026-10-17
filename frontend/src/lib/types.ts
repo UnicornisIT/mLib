@@ -129,6 +129,28 @@ export type CatalogTrack = CatalogTrackBrief & {
   has_file: boolean;
   track_id: string | null;
 };
+export type TransferJob = {
+  id: string;
+  source: string;
+  filename: string;
+  status: "queued" | "enriching" | "completed" | "failed" | "cancelled";
+  storefronts: string[];
+  create_playlists: boolean;
+  rows_total: number;
+  unique_total: number;
+  added: number;
+  existing: number;
+  enriched: number;
+  not_found: number;
+  errors: number;
+  invalid_rows: number;
+  pending: number;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  finished_at: string | null;
+};
+export type TransferSummary = { total: number; enriched: number; not_found: number; pending: number };
 export type PlaylistItem = { id: string; position: number; track: Track | null; catalog_track: CatalogTrack | null };
 export type Playlist = {
   id: string;

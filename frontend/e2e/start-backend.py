@@ -36,6 +36,8 @@ os.environ.update(
         "WISHES_DATABASE_URL": database("wishes"),
         "MEDIA_ROOT": str(E2E_ROOT / "media"),
         "FFPROBE_PATH": "__missing_ffprobe__",
+        # Smoke tests must not depend on Apple's lookup service.
+        "ITUNES_LOOKUP_ENABLED": "false",
     }
 )
 

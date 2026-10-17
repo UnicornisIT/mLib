@@ -155,6 +155,44 @@ test.describe("release smoke", () => {
     expect(unexpectedErrors).toEqual([]);
   });
 
+  test("library transfer imports an Apple Music export", async ({ page }) => {
+    test.skip(test.info().project.name !== "desktop-chromium");
+    await setup(page);
+    await page.goto("/music/profile");
+    await page.getByRole("link", { name: /Перенести фонотеку/ }).click();
+    await expect(page.getByRole("heading", { name: "Перенести фонотеку" })).toBeVisible();
+
+    const input = page.getByLabel("Файл экспорта Apple Music");
+    await input.setInputFiles({ name: "broken.csv", mimeType: "text/csv", buffer: Buffer.from("Track name,Artist name\nA,B\n") });
+    await page.getByRole("button", { name: "Перенести", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("нет обязательных колонок");
+
+    const csv = [
+      "\ufeffTrack name,Artist name,Album,Playlist name,Type,ISRC,Apple - id",
+      "Искала,Земфира,Земфира,Дорога,Playlist,RUA119900001,1001",
+      "\"Hello, World\",Тестовый артист,Альбом,Дорога,Playlist,USAAA2400001,1002",
+      "Искала,Земфира,Земфира,Дорога,Playlist,RUA119900001,1001",
+    ].join("\n");
+    await input.setInputFiles({ name: "library.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+    await page.getByRole("switch", { name: "Создать плейлисты из столбца Playlist name" }).click();
+    await page.getByRole("button", { name: "Перенести", exact: true }).click();
+
+    const job = page.getByRole("region", { name: "Последний перенос" });
+    await expect(job.getByText("Перенос завершён")).toBeVisible({ timeout: 30_000 });
+    await expect(job.getByText("library.csv")).toBeVisible();
+    await expect(job.locator("div", { has: page.getByText("Добавлено", { exact: true }) }).getByRole("definition")).toHaveText("2");
+    await expect(job.locator("div", { has: page.getByText("Строк в файле", { exact: true }) }).getByRole("definition")).toHaveText("3");
+    await page.reload();
+    await expect(page.getByRole("region", { name: "Последний перенос" }).getByText("library.csv")).toBeVisible();
+
+    await page.goto("/music/profile");
+    await expect(page.getByRole("link", { name: /Перенести фонотеку/ })).toContainText("2 трека в каталоге");
+    await page.goto("/music/playlists");
+    await page.getByRole("button", { name: /Дорога/ }).click();
+    await expect(page.getByRole("main").getByText("Искала")).toBeVisible();
+    await expect(page.getByRole("main").getByText(/нет файла/).first()).toBeVisible();
+  });
+
   test("mobile setup screen has no horizontal overflow", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "mobile-chromium");
     await page.goto("/login");

@@ -1,6 +1,6 @@
 "use client";
 
-import { CakeSlice, ChevronRight, CircleAlert, KeyRound, MapPin, Pencil } from "lucide-react";
+import { ArrowRightLeft, CakeSlice, ChevronRight, CircleAlert, KeyRound, MapPin, Pencil } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ProfileAvatar, userDisplayName } from "@/components/ProfileAvatar";
@@ -8,8 +8,17 @@ import { ProfileEditDialog } from "@/components/ProfileEditDialog";
 import { ProfilePasswordDialog } from "@/components/ProfilePasswordDialog";
 import { useLibraryChanged } from "@/hooks/useLibraryChanged";
 import { api } from "@/lib/api";
-import type { MetadataAttentionSummary } from "@/lib/types";
+import type { MetadataAttentionSummary, TransferSummary } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
+
+function catalogCountText(count: number) {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  if (lastTwo >= 11 && lastTwo <= 14) return `${count} треков в каталоге`;
+  if (last === 1) return `${count} трек в каталоге`;
+  if (last >= 2 && last <= 4) return `${count} трека в каталоге`;
+  return `${count} треков в каталоге`;
+}
 
 function trackCountText(count: number) {
   const lastTwo = count % 100;
@@ -23,12 +32,16 @@ function trackCountText(count: number) {
 export default function MusicProfilePage() {
   const { user } = useAuth();
   const [attentionCount, setAttentionCount] = useState<number | null>(null);
+  const [catalogCount, setCatalogCount] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const loadAttentionCount = useCallback(() => {
     void api<MetadataAttentionSummary>("/music/tracks/attention-summary")
       .then((summary) => setAttentionCount(summary.total))
       .catch(() => setAttentionCount(null));
+    void api<TransferSummary>("/music/transfer/summary")
+      .then((summary) => setCatalogCount(summary.total))
+      .catch(() => setCatalogCount(null));
   }, []);
 
   useEffect(loadAttentionCount, [loadAttentionCount]);
@@ -81,6 +94,17 @@ export default function MusicProfilePage() {
             </span>
             <span className="profile-action-side">
               <span className="profile-action-count">{attentionCount ?? "—"}</span>
+              <ChevronRight size={18} />
+            </span>
+          </Link>
+          <Link href="/music/transfer" className="profile-action-card">
+            <span className="profile-action-icon"><ArrowRightLeft size={20} /></span>
+            <span className="profile-action-copy">
+              <strong>Перенести фонотеку</strong>
+              <span>{catalogCount ? catalogCountText(catalogCount) : "Загрузите экспорт Apple Music, чтобы собрать каталог треков."}</span>
+            </span>
+            <span className="profile-action-side">
+              <span className="profile-action-count">{catalogCount ?? "—"}</span>
               <ChevronRight size={18} />
             </span>
           </Link>
