@@ -5,12 +5,8 @@ import { Artwork } from "@/components/Artwork";
 import { catalogAlbumHref } from "@/lib/catalog";
 import type { CatalogAlbum } from "@/lib/types";
 
-export function catalogAlbumLink(album: CatalogAlbum) {
-  return catalogAlbumHref({ artist_name: album.track_artist_name, album_title: album.title, collection_id: album.collection_id });
-}
-
 export function CatalogAlbumCard({ album }: { album: CatalogAlbum }) {
-  const href = catalogAlbumLink(album);
+  const href = catalogAlbumHref(album.key);
   const missing = album.track_count - album.with_file;
   return (
     <article className={`catalog-card ${album.with_file ? "" : "no-file"}`} aria-label={`${album.title} — ${album.artist_name}`}>

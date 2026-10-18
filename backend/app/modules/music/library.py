@@ -1,8 +1,10 @@
 import logging
 import math
-import os
+import re
 import uuid
+from collections import Counter
 from collections.abc import Sequence
+from functools import partial
 from pathlib import Path
 
 from sqlalchemy import select
@@ -102,6 +104,7 @@ def catalog_brief(item: CatalogTrack) -> CatalogTrackBrief:
         artist_name=item.artist_name,
         album_title=item.album_title,
         collection_id=item.collection_id,
+        album_key=catalog_album_key(item),
         year=item.year,
         duration_ms=item.duration_ms,
         artwork_url=sized_artwork_url(item.artwork_url),
@@ -122,25 +125,84 @@ def serialize_catalog_track(item: CatalogTrack) -> CatalogTrackRead:
 
 
 def lead_artist(names: list[str]) -> str:
+    """Artist credited on most tracks: "Daft Punk & X" and "Daft Punk, Y" give "Daft Punk"."""
     unique = list(dict.fromkeys(names))
     if len(unique) <= 1:
         return unique[0] if unique else ""
-    prefix = os.path.commonprefix(unique).rstrip(" ,&").strip()
-    return prefix if len(prefix) >= 2 else "Разные исполнители"
+    counts: Counter[str] = Counter()
+    spelling: dict[str, str] = {}
+    for name in names:
+        for part in FEATURED_ARTIST.split(name):
+            if part.strip():
+                normalized = normalize_identity(part)
+                spelling.setdefault(normalized, part.strip())
+                counts[normalized] += 1
+    artist, count = counts.most_common(1)[0]
+    return spelling[artist] if count * 2 > len(names) else "Разные исполнители"
+
+
+FEATURED_ARTIST = re.compile(r"\s*(?:,|&|\+|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b|\bx\b|\bи\b)\s*", re.IGNORECASE)
+
+
+def primary_artist(name: str) -> str:
+    """First credited artist: "Daft Punk, Pharrell Williams & Nile Rodgers" gives "Daft Punk"."""
+    return FEATURED_ARTIST.split(name, maxsplit=1)[0].strip() or name
+
+
+def credited_artists(name: str) -> set[str]:
+    return {normalize_identity(part) for part in FEATURED_ARTIST.split(name) if part.strip()}
+
+
+def catalog_album_key(item: CatalogTrack) -> str | None:
+    """Album title and lead artist of a track; an album is found by the key of any of its tracks."""
+    if not item.album_title:
+        return None
+    return f"{normalize_identity(item.album_title)}|{normalize_identity(primary_artist(item.artist_name))}"
+
+
+def _union_root(parent: list[int], index: int) -> int:
+    while parent[index] != index:
+        parent[index] = parent[parent[index]]
+        index = parent[index]
+    return index
+
+
+def catalog_album_groups(items: Sequence[CatalogTrack]) -> list[tuple[str, set[str], list[CatalogTrack]]]:
+    """
+    Tracks with the same album title form one album when they share a credited artist or an Apple album:
+    editions of "Pieces of a Dream" and a soundtrack by many artists stay whole, while "Greatest Hits"
+    of two different artists stays apart.
+    """
+    by_title: dict[str, list[CatalogTrack]] = {}
+    for item in items:
+        if item.album_title:
+            by_title.setdefault(normalize_identity(item.album_title), []).append(item)
+    groups = []
+    for tracks in by_title.values():
+        parent = list(range(len(tracks)))
+        root = partial(_union_root, parent)
+        seen: dict[str, int] = {}
+        for index, item in enumerate(tracks):
+            links = {f"artist:{artist}" for artist in credited_artists(item.artist_name)}
+            if item.collection_id:
+                links.add(f"apple:{item.collection_id}")
+            for link in links:
+                if link in seen:
+                    parent[root(index)] = root(seen[link])
+                else:
+                    seen[link] = index
+        components: dict[int, list[CatalogTrack]] = {}
+        for index, item in enumerate(tracks):
+            components.setdefault(root(index), []).append(item)
+        for members in components.values():
+            keys = {key for key in map(catalog_album_key, members) if key}
+            groups.append((min(keys), keys, members))
+    return groups
 
 
 def group_catalog_albums(items: Sequence[CatalogTrack]) -> list[CatalogAlbumRead]:
-    groups: dict[str, list[CatalogTrack]] = {}
-    for item in items:
-        if not item.album_title:
-            continue
-        if item.collection_id:
-            key = f"apple:{item.collection_id}"
-        else:
-            key = f"{item.normalized_artist}|{normalize_identity(item.album_title)}"
-        groups.setdefault(key, []).append(item)
     albums = []
-    for key, tracks in groups.items():
+    for key, _, tracks in catalog_album_groups(items):
         first = tracks[0]
         linked = [item.track for item in tracks if item.track is not None]
         with_art = next((track for track in linked if track.artwork_id), None)
@@ -150,10 +212,8 @@ def group_catalog_albums(items: Sequence[CatalogTrack]) -> list[CatalogAlbumRead
         albums.append(
             CatalogAlbumRead(
                 key=key,
-                collection_id=first.collection_id,
                 title=first.album_title or "",
                 artist_name=lead_artist([item.artist_name for item in tracks]),
-                track_artist_name=first.artist_name,
                 year=min(years) if years else None,
                 artwork_url=sized_artwork_url(apple_art.artwork_url) if apple_art else None,
                 artwork_id=with_art.artwork_id if with_art else None,

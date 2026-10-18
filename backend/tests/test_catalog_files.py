@@ -269,17 +269,31 @@ def test_linked_track_exposes_catalog_data_without_touching_tags(
     assert cards[no_file.id]["spotify_url"].startswith("https://open.spotify.com/search/")
 
 
-def test_catalog_albums_group_by_apple_album_and_cover_linked_files(
+def test_catalog_albums_group_by_album_title_and_lead_artist(
     authenticated_client: TestClient, db: Session, tmp_path: Path
 ) -> None:
     lucky = add_card(db, "617154366", "Get Lucky", "Daft Punk, Pharrell Williams & Nile Rodgers")
     crush = add_card(db, "617154362", "Instant Crush", "Daft Punk & Julian Casablancas")
+    # Two Apple editions of one album: different album ids, same title and artist.
+    dream = add_card(db, "8001", "Left Outside Alone", "Anastacia")
+    sick = add_card(db, "8002", "Sick and Tired", "Anastacia")
+    hits = add_card(db, "8003", "Greatest Hit", "Someone Else")
+    # A soundtrack: one Apple album, a different artist on every track.
+    shrek = [
+        add_card(db, f"810{index}", f"Song {index}", artist) for index, artist in enumerate(("Eels", "Smash Mouth"))
+    ]
     add_card(db, "9001", "Искала", "Земфира")
+    for card, collection in ((lucky, "617154241"), (crush, "617154241"), (dream, "100"), (sick, "200")):
+        card.collection_id = collection
     for card in (lucky, crush):
         card.album_title = "Random Access Memories"
-        card.collection_id = "617154241"
         card.year = 2013
         card.apple_url = f"https://music.apple.com/ru/album/ram/617154241?i={card.apple_track_id}"
+    for card in (dream, sick, hits):
+        card.album_title = "Pieces of a Dream"
+    for card in shrek:
+        card.album_title = "Shrek (Original Motion Picture Soundtrack)"
+        card.collection_id = "300"
     db.commit()
     path = make_wav(tmp_path / "lucky.wav", title="Get Lucky", artist="Daft Punk", album="RAM")
     linked = authenticated_client.post(
@@ -287,20 +301,31 @@ def test_catalog_albums_group_by_apple_album_and_cover_linked_files(
     ).json()["track"]
 
     albums = authenticated_client.get("/api/music/transfer/albums").json()
-    assert [(album["title"], album["artist_name"]) for album in albums] == [
-        ("Random Access Memories", "Daft Punk"),
-        ("Искала - Single", "Земфира"),
+    assert [(album["title"], album["artist_name"], album["track_count"]) for album in albums] == [
+        ("Pieces of a Dream", "Anastacia", 2),
+        ("Random Access Memories", "Daft Punk", 2),
+        ("Pieces of a Dream", "Someone Else", 1),
+        ("Искала - Single", "Земфира", 1),
+        ("Shrek (Original Motion Picture Soundtrack)", "Разные исполнители", 2),
     ]
-    ram = albums[0]
-    assert (ram["key"], ram["track_count"], ram["with_file"], ram["year"]) == ("apple:617154241", 2, 1, 2013)
+    ram = albums[1]
+    assert (ram["key"], ram["with_file"], ram["year"]) == ("random access memories|daft punk", 1, 2013)
     assert ram["apple_music_url"] == "https://music.apple.com/ru/album/ram/617154241"
     assert ram["local_album_ids"] == [linked["album"]["id"]]
-    assert albums[1]["key"].startswith("земфира|") and albums[1]["collection_id"] is None
+
+    detail = authenticated_client.get("/api/music/transfer/album", params={"key": albums[0]["key"]}).json()
+    assert [track["title"] for track in detail["tracks"]] == ["Left Outside Alone", "Sick and Tired"]
+    assert {track["album_key"] for track in detail["tracks"]} == {albums[0]["key"]}
+    assert authenticated_client.get("/api/music/transfer/album", params={"key": "nope"}).status_code == 404
 
     without = authenticated_client.get("/api/music/transfer/albums", params={"status": "without_file"}).json()
-    assert [(album["title"], album["track_count"]) for album in without] == [
+    assert [(album["title"], album["track_count"]) for album in without][:2] == [
+        ("Pieces of a Dream", 2),
         ("Random Access Memories", 1),
-        ("Искала - Single", 1),
     ]
     searched = authenticated_client.get("/api/music/transfer/albums", params={"q": "иск"}).json()
-    assert [album["key"] for album in searched] == [albums[1]["key"]]
+    assert [album["key"] for album in searched] == [albums[3]["key"]]
+    # Any track's album key opens the whole album.
+    smash = authenticated_client.get(f"/api/music/transfer/tracks/{shrek[1].id}").json()["album_key"]
+    soundtrack = authenticated_client.get("/api/music/transfer/album", params={"key": smash}).json()
+    assert [track["artist_name"] for track in soundtrack["tracks"]] == ["Eels", "Smash Mouth"]

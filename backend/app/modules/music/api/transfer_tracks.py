@@ -10,6 +10,8 @@ from app.core.config import Settings, get_settings
 from app.database.session import get_music_db as get_db
 from app.modules.music.library import (
     DuplicateTrackError,
+    catalog_album_groups,
+    catalog_album_key,
     group_catalog_albums,
     import_staged_file,
     pagination,
@@ -20,6 +22,7 @@ from app.modules.music.library import (
 from app.modules.music.metadata import normalize_identity
 from app.modules.music.models import CatalogTrack, Track
 from app.modules.music.schemas import (
+    CatalogAlbumDetail,
     CatalogAlbumRead,
     CatalogFileLink,
     CatalogFileResult,
@@ -135,6 +138,24 @@ def list_catalog_albums(
         .options(selectinload(CatalogTrack.track))
     ).all()
     return group_catalog_albums(items)
+
+
+@router.get("/album", response_model=CatalogAlbumDetail)
+def get_catalog_album(key: str, _: CurrentUser, db: Annotated[Session, Depends(get_db)]) -> CatalogAlbumDetail:
+    """The album holding the track with this album key, with every track of the album."""
+    candidates = db.scalars(
+        select(CatalogTrack)
+        .where(CatalogTrack.album_title.is_not(None))
+        .options(selectinload(CatalogTrack.track))
+        .order_by(func.lower(CatalogTrack.title), CatalogTrack.id)
+    ).all()
+    title = key.split("|", 1)[0]
+    same_title = [item for item in candidates if (catalog_album_key(item) or "").split("|", 1)[0] == title]
+    items = next((members for _, keys, members in catalog_album_groups(same_title) if key in keys), None)
+    if not items:
+        raise HTTPException(status_code=404, detail="Альбом не найден в каталоге")
+    [album] = group_catalog_albums(items)
+    return CatalogAlbumDetail(**album.model_dump(), tracks=[serialize_catalog_track(item) for item in items])
 
 
 @router.get("/tracks/{catalog_track_id}", response_model=CatalogTrackRead)

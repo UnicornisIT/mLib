@@ -10,8 +10,8 @@ import { CatalogHero, ExternalLinks } from "@/components/CatalogHero";
 import { EmptyState, PageLoader } from "@/components/EmptyState";
 import { useLibraryChanged } from "@/hooks/useLibraryChanged";
 import { api } from "@/lib/api";
-import { catalogAlbumArtist, catalogArtworkSource, catalogDuration, catalogHref, loadAllCatalogTracks, sameCatalogAlbum } from "@/lib/catalog";
-import type { CatalogTrack, Track } from "@/lib/types";
+import { catalogArtworkSource, catalogDuration, catalogHref } from "@/lib/catalog";
+import type { CatalogAlbumDetail, CatalogTrack, Track } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { usePlayer } from "@/providers/PlayerProvider";
 
@@ -21,24 +21,23 @@ export default function CatalogAlbumPage() {
 
 function CatalogAlbum() {
   const searchParams = useSearchParams();
-  const collection = searchParams.get("collection");
-  const artistParam = searchParams.get("artist");
-  const title = searchParams.get("title") ?? "";
+  const key = searchParams.get("key") ?? "";
   const { user } = useAuth();
   const player = usePlayer();
+  const [album, setAlbum] = useState<CatalogAlbumDetail | null>(null);
   const [items, setItems] = useState<CatalogTrack[] | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     try {
-      // Search narrows the list by album title; the exact album is picked here.
-      const found = await loadAllCatalogTracks(new URLSearchParams({ status: "all", q: title }));
-      setItems(found.filter((item) => sameCatalogAlbum(item, { collection, artist: artistParam, title })));
+      const detail = await api<CatalogAlbumDetail>(`/music/transfer/album?${new URLSearchParams({ key })}`);
+      setAlbum(detail);
+      setItems(detail.tracks);
       setError("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Не удалось загрузить альбом");
     }
-  }, [artistParam, collection, title]);
+  }, [key]);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- state is set after the request resolves
   useEffect(() => { void load(); }, [load]);
   useLibraryChanged(useCallback(() => { void load(); }, [load]));
@@ -46,12 +45,11 @@ function CatalogAlbum() {
   const update = (updated: CatalogTrack) => setItems((current) => current?.map((item) => item.id === updated.id ? updated : item) ?? null);
 
   if (error) return <div className="content-page"><div className="form-error" role="alert">{error}</div></div>;
-  if (!items) return <div className="content-page"><PageLoader rows={6} /></div>;
+  if (!album || !items) return <div className="content-page"><PageLoader rows={6} /></div>;
   if (!items.length) return <div className="content-page"><EmptyState title="Альбом не найден" description="В каталоге нет треков этого альбома." action={<Link className="button" href="/music/catalog" style={{ marginTop: 16 }}>К каталогу</Link>} /></div>;
 
-  const artist = catalogAlbumArtist(items.map((item) => item.artist_name));
-  const cover = items.find((item) => item.artwork_id) ?? items.find((item) => item.artwork_url) ?? items[0];
-  const year = items.find((item) => item.year)?.year;
+  const title = album.title;
+  const year = album.year;
   const withFile = items.filter((item) => item.has_file);
   const totalMs = items.reduce((sum, item) => sum + (item.duration_ms ?? 0), 0);
   const playAll = async () => {
@@ -62,10 +60,10 @@ function CatalogAlbum() {
   return (
     <div className="content-page catalog-detail">
       <Link className="catalog-back" href="/music/catalog"><ArrowLeft size={15} />Каталог</Link>
-      <CatalogHero source={catalogArtworkSource(cover, 64)} art={<Artwork id={cover.artwork_id} url={cover.artwork_url} alt={title} size={512} />}>
+      <CatalogHero source={catalogArtworkSource(album, 64)} art={<Artwork id={album.artwork_id} url={album.artwork_url} alt={title} size={512} />}>
         <div className="eyebrow">Альбом</div>
         <h1>{title}</h1>
-        <p className="catalog-hero-artist">{artist}</p>
+        <p className="catalog-hero-artist">{album.artist_name}</p>
         <p className="catalog-hero-meta">
           {year && <span>{year}</span>}
           <span>{items.length} в каталоге</span>
@@ -74,7 +72,7 @@ function CatalogAlbum() {
         </p>
         <div className="catalog-actions">
           {withFile.length > 0 && <button className="button primary" type="button" onClick={() => void playAll()}><Play size={17} fill="currentColor" />Слушать</button>}
-          <ExternalLinks appleMusicUrl={cover.apple_music_url} />
+          <ExternalLinks appleMusicUrl={album.apple_music_url} />
         </div>
       </CatalogHero>
       <ol className="catalog-tracklist" aria-label="Треки альбома">

@@ -94,7 +94,7 @@ export default function CatalogTrackPage() {
         <h1>{item.title}</h1>
         <p className="catalog-hero-artist">{item.artist_name}</p>
         <p className="catalog-hero-meta">
-          {item.album_title && <Link href={catalogAlbumHref(item)}>{item.album_title}</Link>}
+          {item.album_title && (item.album_key ? <Link href={catalogAlbumHref(item.album_key)}>{item.album_title}</Link> : <span>{item.album_title}</span>)}
           {[item.year, duration].filter(Boolean).map((value) => <span key={String(value)}>{value}</span>)}
           {!item.has_file && <span className="catalog-pill">Нет файла</span>}
         </p>

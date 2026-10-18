@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, artworkUrl } from "@/lib/api";
-import type { CatalogFileResult, CatalogTrack, Track } from "@/lib/types";
+import type { CatalogFileResult, Track } from "@/lib/types";
 
 export type CatalogFilter = "all" | "with_file" | "without_file" | "enriched" | "not_found";
 
@@ -31,37 +31,9 @@ export function catalogHref(id: string) {
   return `/music/catalog/${id}`;
 }
 
-type AlbumIdentity = Pick<CatalogTrack, "artist_name" | "album_title" | "collection_id">;
-
-/** Apple's album id groups tracks that credit different artists ("Daft Punk & Pharrell Williams"). */
-export function catalogAlbumKey(item: AlbumIdentity) {
-  return item.collection_id ? `apple:${item.collection_id}` : `${item.artist_name}\u0000${item.album_title ?? ""}`;
-}
-
-export function sameCatalogAlbum(item: AlbumIdentity, album: { collection: string | null; artist: string | null; title: string }) {
-  if (album.collection) return item.collection_id === album.collection;
-  return item.album_title === album.title && item.artist_name === album.artist;
-}
-
-export function catalogAlbumHref(item: AlbumIdentity) {
-  const params = new URLSearchParams({ title: item.album_title ?? "" });
-  if (item.collection_id) params.set("collection", item.collection_id);
-  else params.set("artist", item.artist_name);
-  return `/music/catalog/album?${params}`;
-}
-
-/** The lead artist shared by an album's tracks: "Daft Punk & X" and "Daft Punk, Y" give "Daft Punk". */
-export function catalogAlbumArtist(names: string[]) {
-  const unique = [...new Set(names)];
-  if (unique.length <= 1) return unique[0] ?? "";
-  let prefix = unique[0];
-  for (const name of unique.slice(1)) {
-    let index = 0;
-    while (index < prefix.length && index < name.length && prefix[index] === name[index]) index += 1;
-    prefix = prefix.slice(0, index);
-  }
-  const lead = prefix.replace(/[\s,&]+$/u, "").trim();
-  return lead.length >= 2 ? lead : "Разные исполнители";
+/** Catalog albums are keyed by album title and lead artist; the key comes from the API. */
+export function catalogAlbumHref(key: string) {
+  return `/music/catalog/album?${new URLSearchParams({ key })}`;
 }
 
 export function catalogDuration(durationMs: number | null) {
@@ -85,18 +57,6 @@ export async function uploadCatalogFile(catalogTrackId: string, file: File) {
   const result = await api<CatalogFileResult>(`/music/transfer/tracks/${catalogTrackId}/file`, { method: "POST", body });
   window.dispatchEvent(new Event("mlib:library-changed"));
   return result;
-}
-
-/** Loads every catalog page for the given filters; the API caps a page at 200 items. */
-export async function loadAllCatalogTracks(params: URLSearchParams) {
-  const items: CatalogTrack[] = [];
-  for (let page = 1; ; page += 1) {
-    params.set("page", String(page));
-    params.set("page_size", "200");
-    const result = await api<{ items: CatalogTrack[]; pages: number }>(`/music/transfer/tracks?${params}`);
-    items.push(...result.items);
-    if (page >= result.pages) return items;
-  }
 }
 
 export function catalogArtworkSource(item: { artwork_id?: string | null; artwork_url?: string | null }, size: 64 | 256 | 512 = 256) {
