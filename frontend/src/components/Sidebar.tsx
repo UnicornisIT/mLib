@@ -50,13 +50,13 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           </button>
         </div>
         <nav className="nav-group" aria-label="Музыкальная библиотека">
-          {links.slice(0, 5).map(({ href, label, icon: Icon }) => (
+          {links.slice(0, 6).map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href} className={`nav-item ${isActive(href) ? "active" : ""}`} onClick={onClose}>
               <Icon size={18} strokeWidth={1.8} /> {label}
             </Link>
           ))}
           <div className="nav-label">Моя коллекция</div>
-          {links.slice(5).map(({ href, label, icon: Icon }) => (
+          {links.slice(6).map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href} className={`nav-item ${isActive(href) ? "active" : ""}`} onClick={onClose}>
               <Icon size={18} strokeWidth={1.8} /> {label}
             </Link>

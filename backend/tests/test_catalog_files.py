@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from mutagen.id3 import TALB, TIT2, TPE1, TSRC
 from mutagen.mp4 import MP4FreeForm
 from mutagen.wave import WAVE
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -367,3 +368,47 @@ def test_catalog_artists_group_by_lead_artist_and_cover_fully_linked_files(
     upload_files(authenticated_client, make_wav(tmp_path / "other.wav", title="Other Song", artist="Daft Punk"))
     artists = authenticated_client.get("/api/music/transfer/artists").json()
     assert artists[0]["local_artist_ids"] == []
+
+
+def test_catalog_genres_are_backfilled_and_merged_with_library_files(
+    authenticated_client: TestClient, db: Session, tmp_path: Path
+) -> None:
+    from app.modules.music.transfer.worker import TransferWorker
+
+    card = add_card(db, "7001", "Искала", "Земфира")
+    other = add_card(db, "7002", "Хочешь?", "Земфира")
+    for item in (card, other):
+        item.storefront = "ru"
+    db.commit()
+
+    class GenreLookup:
+        def __init__(self) -> None:
+            self.calls: list[tuple[list[str], str]] = []
+
+        def lookup(self, track_ids: list[str], country: str) -> dict[str, dict]:
+            self.calls.append((list(track_ids), country))
+            return {"7001": {"trackId": 7001, "primaryGenreName": "Рок"}}
+
+        def search(self, term: str, country: str) -> list[dict]:
+            return []
+
+    fake = GenreLookup()
+    TransferWorker(client=fake, sleep=lambda _: None).run()
+    assert [(sorted(ids), country) for ids, country in fake.calls] == [(["7001", "7002"], "ru")]
+    db.expire_all()
+    assert (db.get(CatalogTrack, card.id).genre, db.get(CatalogTrack, other.id).genre) == ("Рок", "")
+    TransferWorker(client=fake, sleep=lambda _: None).run()
+    assert len(fake.calls) == 1
+
+    # A library file outside the catalog keeps its own genre; a linked file is counted through the catalog.
+    rock = make_wav(tmp_path / "rock.wav", title="Local Song", artist="Local Band", album="Local")
+    upload_files(authenticated_client, rock)
+    track = db.scalar(select(Track).where(Track.title == "Local Song"))
+    track.genre = "рок"
+    db.commit()
+
+    genres = authenticated_client.get("/api/music/transfer/genres").json()
+    assert genres == [{"name": "Рок", "track_count": 2, "album_count": 2, "catalog_count": 1}]
+    listed = authenticated_client.get("/api/music/transfer/tracks", params={"genre": "Рок"}).json()
+    assert [item["title"] for item in listed["items"]] == ["Искала"]
+    assert listed["items"][0]["genre"] == "Рок"

@@ -68,6 +68,7 @@ export type Artist = {
 export type ArtistDetail = Artist & { albums: Album[]; tracks: Track[] };
 export type ArtistPage = { items: Artist[]; page: number; page_size: number; total: number; pages: number };
 export type Genre = { name: string; track_count: number; album_count: number };
+export type CatalogGenre = Genre & { catalog_count: number };
 export type User = {
   id: string;
   username: string;

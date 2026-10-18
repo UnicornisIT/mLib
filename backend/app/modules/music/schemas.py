@@ -35,6 +35,7 @@ class CatalogTrackBrief(BaseModel):
     # Catalog album this track belongs to: same album title and lead artist.
     album_key: str | None = None
     artist_key: str | None = None
+    genre: str | None = None
     year: int | None = None
     duration_ms: int | None = None
     # Apple artwork is only linked, never downloaded; artwork embedded in the file takes priority.
@@ -179,6 +180,11 @@ class GenreRead(BaseModel):
     name: str
     track_count: int
     album_count: int
+
+
+class CatalogGenreRead(GenreRead):
+    # Catalog tracks of the genre; the rest are library files that are not linked to the catalog.
+    catalog_count: int
 
 
 class UploadResult(BaseModel):

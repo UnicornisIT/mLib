@@ -107,6 +107,7 @@ def catalog_brief(item: CatalogTrack) -> CatalogTrackBrief:
         collection_id=item.collection_id,
         album_key=catalog_album_key(item),
         artist_key=catalog_artist_key(item),
+        genre=item.genre or None,
         year=item.year,
         duration_ms=item.duration_ms,
         artwork_url=sized_artwork_url(item.artwork_url),

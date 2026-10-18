@@ -152,6 +152,8 @@ class CatalogTrack(MusicBase):
     # Service of the export ("spotify", "youtube_music", ...) and the track id there, when the export has one.
     source_service: Mapped[str | None] = mapped_column(String(40))
     source_track_id: Mapped[str | None] = mapped_column(String(128))
+    # Apple Music primary genre; an empty string means Apple has none (so the backfill does not repeat).
+    genre: Mapped[str | None] = mapped_column(String(100))
     isrc: Mapped[str | None] = mapped_column(String(32), index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     artist_name: Mapped[str] = mapped_column(String(500), nullable=False)

@@ -48,6 +48,7 @@ def lookup_payload(track_id: str, name: str, artist: str = "Artist", **extra) ->
         "previewUrl": "https://audio-ssl.itunes.apple.com/preview.m4a",
         "releaseDate": "2019-04-05T07:00:00Z",
         "trackTimeMillis": 215000,
+        "primaryGenreName": "Pop",
         **extra,
     }
 

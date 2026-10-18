@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRightLeft, Search } from "lucide-react";
+import { ArrowRightLeft, Search, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CSSProperties, Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -68,6 +68,7 @@ function MusicCatalog() {
   const view = parseView(searchParams.get("view"));
   const filter = parseFilter(searchParams.get("status"));
   const term = searchParams.get("q")?.trim() ?? "";
+  const genre = searchParams.get("genre") ?? "";
   const [query, setQuery] = useState(term);
   const [shownTerm, setShownTerm] = useState(term);
   if (term !== shownTerm) {
@@ -83,17 +84,18 @@ function MusicCatalog() {
   const loadedPages = useRef(0);
 
   // Quick successive changes must build on each other, not on a URL that has not updated yet.
-  const requested = useRef<Record<"view" | "status" | "q", string>>({ view, status: filter, q: term });
+  const requested = useRef<Record<"view" | "status" | "q" | "genre", string>>({ view, status: filter, q: term, genre });
   useEffect(() => {
-    requested.current = { view, status: filter, q: term };
-  }, [view, filter, term]);
-  const navigate = useCallback((changes: Partial<Record<"view" | "status" | "q", string>>) => {
+    requested.current = { view, status: filter, q: term, genre };
+  }, [view, filter, term, genre]);
+  const navigate = useCallback((changes: Partial<Record<"view" | "status" | "q" | "genre", string>>) => {
     const state = { ...requested.current, ...changes };
     requested.current = state;
     const next = new URLSearchParams();
     if (state.view !== "tracks") next.set("view", state.view);
     if (state.status !== "all") next.set("status", state.status);
     if (state.q) next.set("q", state.q);
+    if (state.genre) next.set("genre", state.genre);
     const search = next.toString();
     router.replace(search ? `${pathname}?${search}` : pathname, { scroll: false });
   }, [pathname, router]);
@@ -108,8 +110,9 @@ function MusicCatalog() {
   const params = useCallback((page: number) => {
     const search = new URLSearchParams({ status: filter, page: String(page), page_size: String(PAGE_SIZE) });
     if (term) search.set("q", term);
+    if (genre) search.set("genre", genre);
     return search;
-  }, [filter, term]);
+  }, [filter, genre, term]);
 
   // Refetches every page already shown so a background change does not collapse the grid.
   const reload = useCallback(async () => {
@@ -188,7 +191,7 @@ function MusicCatalog() {
   const heroColor = useArtworkColor(heroSource);
   const style = heroColor ? { "--catalog-tint": heroColor } as CSSProperties : undefined;
   const canUpload = Boolean(user?.is_admin);
-  const emptyLibrary = items !== null && pages.count === 0 && filter === "all" && !term;
+  const emptyLibrary = items !== null && pages.count === 0 && filter === "all" && !term && !genre;
 
   return (
     <div className="catalog-page" style={style}>
@@ -198,7 +201,7 @@ function MusicCatalog() {
           <div>
             <div className="eyebrow">musicLib · Каталог</div>
             <h1>Каталог</h1>
-            <p>{items === null ? "Загружаем треки…" : emptyLibrary ? "Здесь собираются треки из перенесённой фонотеки — с файлами и без." : term ? `По запросу «${term}»: ${trackCountText(pages.count)}.` : `${trackCountText(pages.count)} ${FILTER_SUMMARY[filter]}`}</p>
+            <p>{items === null ? "Загружаем треки…" : emptyLibrary ? "Здесь собираются треки из перенесённой фонотеки — с файлами и без." : term ? `По запросу «${term}»: ${trackCountText(pages.count)}.` : genre ? `Жанр «${genre}»: ${trackCountText(pages.count)} в каталоге.` : `${trackCountText(pages.count)} ${FILTER_SUMMARY[filter]}`}</p>
           </div>
           <div className="page-actions">
             <Link className="button" href="/music/transfer"><ArrowRightLeft size={16} />Перенести фонотеку</Link>
@@ -217,6 +220,11 @@ function MusicCatalog() {
               <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Название, исполнитель или альбом" aria-label="Поиск по каталогу" />
             </label>
             <div className="catalog-filters" role="group" aria-label="Фильтр каталога">
+              {genre && (
+                <button type="button" className="active catalog-genre-chip" aria-label={`Убрать фильтр по жанру ${genre}`} onClick={() => navigate({ genre: "" })}>
+                  {genre}<X size={13} />
+                </button>
+              )}
               {CATALOG_FILTERS.map((option) => (
                 <button key={option.value} type="button" aria-pressed={filter === option.value} className={filter === option.value ? "active" : ""} onClick={() => navigate({ status: option.value })}>{option.label}</button>
               ))}

@@ -92,6 +92,7 @@ def catalog_values(item: dict[str, Any]) -> dict[str, Any]:
         "artist_name": str(item.get("artistName") or "").strip() or None,
         "album_title": str(item.get("collectionName") or "").strip() or None,
         "collection_id": str(item["collectionId"]) if item.get("collectionId") else None,
+        "genre": str(item.get("primaryGenreName") or "").strip()[:100] or None,
         "apple_url": _clean_url(item.get("trackViewUrl")),
         "artwork_url": _clean_url(item.get("artworkUrl100")),
         "year": int(release[:4]) if release[:4].isdigit() else None,

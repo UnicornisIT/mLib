@@ -30,6 +30,7 @@ from app.modules.music.schemas import (
     CatalogArtistRead,
     CatalogFileLink,
     CatalogFileResult,
+    CatalogGenreRead,
     CatalogTrackPage,
     CatalogTrackRead,
 )
@@ -74,8 +75,10 @@ def has_file_filter():
 CatalogStatus = Literal["all", "with_file", "without_file", "enriched", "not_found"]
 
 
-def catalog_filters(q: str | None, file_status: CatalogStatus) -> list:
+def catalog_filters(q: str | None, file_status: CatalogStatus, genre: str | None = None) -> list:
     filters = []
+    if genre:
+        filters.append(CatalogTrack.genre == genre)
     if q and q.strip():
         # Normalized columns are already casefolded: SQLite LIKE ignores case only for ASCII.
         term = f"%{normalize_identity(q)}%"
@@ -105,10 +108,11 @@ def list_catalog_tracks(
     page_size: int = 50,
     q: str | None = None,
     file_status: Annotated[CatalogStatus, Query(alias="status")] = "all",
+    genre: str | None = None,
 ) -> CatalogTrackPage:
     page = max(1, page)
     page_size = min(200, max(1, page_size))
-    filters = catalog_filters(q, file_status)
+    filters = catalog_filters(q, file_status, genre)
     total = int(db.scalar(select(func.count(CatalogTrack.id)).where(*filters)) or 0)
     offset, limit, pages = pagination(total, page, page_size)
     items = db.scalars(
@@ -134,11 +138,12 @@ def list_catalog_albums(
     db: Annotated[Session, Depends(get_db)],
     q: str | None = None,
     file_status: Annotated[CatalogStatus, Query(alias="status")] = "all",
+    genre: str | None = None,
 ) -> list[CatalogAlbumRead]:
     """Albums of the catalog, so a transferred library has albums before any file is added."""
     items = db.scalars(
         select(CatalogTrack)
-        .where(CatalogTrack.album_title.is_not(None), *catalog_filters(q, file_status))
+        .where(CatalogTrack.album_title.is_not(None), *catalog_filters(q, file_status, genre))
         .options(selectinload(CatalogTrack.track))
     ).all()
     return covering_albums(db, group_catalog_albums(items))
@@ -159,6 +164,44 @@ def covering_albums(db: Session, albums: list[CatalogAlbumRead]) -> list[Catalog
     for album in albums:
         album.local_album_ids = [value for value in album.local_album_ids if value in covered]
     return albums
+
+
+@router.get("/genres", response_model=list[CatalogGenreRead])
+def list_catalog_genres(_: CurrentUser, db: Annotated[Session, Depends(get_db)]) -> list[CatalogGenreRead]:
+    """Genres of the catalog (from Apple Music) together with genres of library files outside the catalog."""
+    genres: dict[str, dict] = {}
+
+    def entry(name: str) -> dict:
+        return genres.setdefault(name.casefold(), {"name": name, "tracks": 0, "catalog": 0, "albums": set()})
+
+    for name, album_title, artist in db.execute(
+        select(CatalogTrack.genre, CatalogTrack.album_title, CatalogTrack.normalized_artist).where(
+            CatalogTrack.genre.is_not(None), CatalogTrack.genre != ""
+        )
+    ):
+        item = entry(name)
+        item["tracks"] += 1
+        item["catalog"] += 1
+        if album_title:
+            item["albums"].add(f"catalog:{album_title.casefold()}|{artist}")
+    for name, album_id in db.execute(
+        select(Track.genre, Track.album_id).where(
+            Track.catalog_track_id.is_(None), Track.genre.is_not(None), Track.genre != ""
+        )
+    ):
+        item = entry(name.strip())
+        item["tracks"] += 1
+        if album_id:
+            item["albums"].add(f"library:{album_id}")
+    return [
+        CatalogGenreRead(
+            name=item["name"],
+            track_count=item["tracks"],
+            album_count=len(item["albums"]),
+            catalog_count=item["catalog"],
+        )
+        for item in sorted(genres.values(), key=lambda value: value["name"].casefold())
+    ]
 
 
 @router.get("/artists", response_model=list[CatalogArtistRead])

@@ -63,13 +63,14 @@ class TransferWorker:
         self.token = str(uuid.uuid4())
 
     def run(self) -> None:
-        """Processes enriching jobs until none are left."""
+        """Processes enriching jobs until none are left, then fills in data older transfers did not keep."""
         while True:
             with self.session_factory() as db:
                 job_ids = db.scalars(
                     select(TransferJob.id).where(TransferJob.status == "enriching").order_by(TransferJob.created_at)
                 ).all()
             if not job_ids:
+                self.backfill_genres()
                 return
             claimed = next((job_id for job_id in job_ids if self.claim(job_id)), None)
             if claimed is None:
@@ -265,6 +266,35 @@ class TransferWorker:
             self.sleep(REQUEST_INTERVAL_SECONDS)
         return found, False
 
+    def backfill_genres(self) -> None:
+        """Catalog tracks found before genres were kept get their Apple genre, 100 tracks per request."""
+        if not self.settings.itunes_lookup_enabled:
+            return
+        fallback = (self.settings.itunes_storefronts or ["us"])[0]
+        while True:
+            with self.session_factory() as db:
+                rows = db.execute(
+                    select(CatalogTrack.apple_track_id, CatalogTrack.storefront)
+                    .where(*missing_genre())
+                    .order_by(CatalogTrack.storefront, CatalogTrack.id)
+                    .limit(LOOKUP_BATCH_SIZE)
+                ).all()
+            if not rows:
+                return
+            storefront = rows[0][1] or fallback
+            ids = [apple_id for apple_id, value in rows if (value or fallback) == storefront]
+            try:
+                found = self.client.lookup(ids, storefront)
+            except TrackLookupError:
+                logger.info("Genre backfill paused: Apple Music lookup is not available")
+                return
+            with self.session_factory() as db:
+                for item in db.scalars(select(CatalogTrack).where(CatalogTrack.apple_track_id.in_(ids))):
+                    payload = found.get(item.apple_track_id or "")
+                    item.genre = catalog_values(payload).get("genre", "") if payload else ""
+                db.commit()
+            self.sleep(REQUEST_INTERVAL_SECONDS)
+
     def heartbeat(self, job_id: str) -> bool:
         with self.session_factory() as db:
             result = db.execute(
@@ -278,6 +308,14 @@ class TransferWorker:
             )
             db.commit()
             return result.rowcount == 1
+
+
+def missing_genre():
+    return (
+        CatalogTrack.enrich_status == "enriched",
+        CatalogTrack.apple_track_id.is_not(None),
+        CatalogTrack.genre.is_(None),
+    )
 
 
 def mark_missing(item: CatalogTrack, failed: bool, now: datetime) -> None:
@@ -357,6 +395,7 @@ def resume_pending_jobs() -> None:
     try:
         with MusicSessionLocal() as db:
             pending = db.scalar(select(TransferJob.id).where(TransferJob.status == "enriching").limit(1))
+            pending = pending or db.scalar(select(CatalogTrack.id).where(*missing_genre()).limit(1))
     except Exception:
         logger.info("Music transfer jobs are not available yet")
         return
