@@ -64,7 +64,7 @@ def list_catalog_tracks(
     page: int = 1,
     page_size: int = 50,
     q: str | None = None,
-    file_status: Annotated[Literal["all", "with_file", "without_file", "not_found"], Query(alias="status")] = "all",
+    file_status: Annotated[Literal["all", "with_file", "without_file", "enriched", "not_found"], Query(alias="status")] = "all",
 ) -> CatalogTrackPage:
     page = max(1, page)
     page_size = min(200, max(1, page_size))
@@ -83,6 +83,8 @@ def list_catalog_tracks(
         filters.append(has_file_filter())
     elif file_status == "without_file":
         filters.append(~has_file_filter())
+    elif file_status == "enriched":
+        filters.append(CatalogTrack.enrich_status == "enriched")
     elif file_status == "not_found":
         filters.append(CatalogTrack.enrich_status.in_(("not_found", "error")))
     total = int(db.scalar(select(func.count(CatalogTrack.id)).where(*filters)) or 0)

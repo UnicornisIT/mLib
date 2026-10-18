@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { api, artworkUrl } from "@/lib/api";
 import type { CatalogFileResult, CatalogTrack, Track } from "@/lib/types";
 
-export type CatalogFilter = "all" | "with_file" | "without_file" | "not_found";
+export type CatalogFilter = "all" | "with_file" | "without_file" | "enriched" | "not_found";
 
 export const CATALOG_FILTERS: { value: CatalogFilter; label: string }[] = [
   { value: "all", label: "Все" },
   { value: "with_file", label: "С файлом" },
   { value: "without_file", label: "Нет файла" },
+  { value: "enriched", label: "Найдены в Apple" },
   { value: "not_found", label: "Не найдены в Apple" },
 ];
 

@@ -185,6 +185,17 @@ test.describe("release smoke", () => {
     await page.reload();
     await expect(page.getByRole("region", { name: "Последний перенос" }).getByText("library.csv")).toBeVisible();
 
+    // Catalog counters open a readable list of the catalog.
+    await page.getByRole("link", { name: /треков в каталоге — открыть список/ }).click();
+    await expect(page).toHaveURL(/\/music\/catalog\?view=list/);
+    const list = page.getByRole("list", { name: "Список треков каталога" });
+    await expect(list.getByRole("listitem")).toHaveCount(2);
+    await expect(list.getByRole("listitem", { name: "Искала — Земфира" }).getByText("Не найден в Apple")).toBeVisible();
+    await expect(list.getByRole("listitem", { name: "Искала — Земфира" }).getByRole("link", { name: "Spotify" })).toHaveAttribute("href", /open\.spotify\.com\/search/);
+    await page.getByRole("button", { name: "Найдены в Apple", exact: true }).click();
+    await expect(page).toHaveURL(/status=enriched/);
+    await expect(page.getByText("Ничего не найдено")).toBeVisible();
+
     await page.goto("/music/profile");
     await expect(page.getByRole("link", { name: /Перенести фонотеку/ })).toContainText("2 трека в каталоге");
     await page.goto("/music/playlists");
@@ -202,7 +213,7 @@ test.describe("release smoke", () => {
     await page.getByRole("button", { name: "Все", exact: true }).click();
     await page.getByRole("tab", { name: "Альбомы" }).click();
     await expect(page.getByLabel("Альбомы каталога").getByRole("link", { name: "Альбом Земфира" })).toBeVisible();
-    await page.getByRole("tab", { name: "Треки" }).click();
+    await page.getByRole("tab", { name: "Обложки" }).click();
 
     // Drag-and-drop straight into a card that has no file.
     const card = grid.getByRole("article", { name: "Hello, World — Тестовый артист" });

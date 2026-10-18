@@ -1,6 +1,6 @@
 "use client";
 
-import { FileSpreadsheet, GalleryVerticalEnd, RotateCcw, UploadCloud, X } from "lucide-react";
+import { ChevronRight, FileSpreadsheet, GalleryVerticalEnd, RotateCcw, UploadCloud, X } from "lucide-react";
 import Link from "next/link";
 import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -25,6 +25,16 @@ function enrichmentProgress(job: TransferJob) {
   if (!ACTIVE_STATUSES.has(job.status)) return 100;
   if (job.added === 0) return 100;
   return Math.round(((job.added - job.pending) / job.added) * 100);
+}
+
+function StatLink({ href, value, label }: { href: string; value: number; label: string }) {
+  return (
+    <Link className="stat-card stat-link" href={href} aria-label={`${value} ${label} — открыть список`}>
+      <span className="stat-link-hint" aria-hidden="true">Список<ChevronRight size={13} /></span>
+      <div className="stat-value">{value}</div>
+      <div className="stat-label">{label}</div>
+    </Link>
+  );
 }
 
 export function LibraryTransfer() {
@@ -133,9 +143,9 @@ export function LibraryTransfer() {
 
       {summary && summary.total > 0 && (
         <div className="transfer-stats" aria-label="Каталог">
-          <div className="stat-card"><div className="stat-value">{summary.total}</div><div className="stat-label">треков в каталоге</div></div>
-          <div className="stat-card"><div className="stat-value">{summary.enriched}</div><div className="stat-label">найдено в Apple Music</div></div>
-          <div className="stat-card"><div className="stat-value">{summary.not_found}</div><div className="stat-label">не найдено</div></div>
+          <StatLink href="/music/catalog?view=list" value={summary.total} label="треков в каталоге" />
+          <StatLink href="/music/catalog?view=list&status=enriched" value={summary.enriched} label="найдено в Apple Music" />
+          <StatLink href="/music/catalog?view=list&status=not_found" value={summary.not_found} label="не найдено" />
         </div>
       )}
 

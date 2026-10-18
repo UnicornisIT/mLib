@@ -2,10 +2,12 @@
 
 import { ArrowRightLeft, Search } from "lucide-react";
 import Link from "next/link";
-import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { CSSProperties, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Artwork } from "@/components/Artwork";
 import { CatalogCard } from "@/components/CatalogCard";
-import { EmptyState } from "@/components/EmptyState";
+import { CatalogList } from "@/components/CatalogList";
+import { EmptyState, PageLoader } from "@/components/EmptyState";
 import { useLibraryChanged } from "@/hooks/useLibraryChanged";
 import { api } from "@/lib/api";
 import {
@@ -24,7 +26,20 @@ import { useAuth } from "@/providers/AuthProvider";
 const PAGE_SIZE = 60;
 const ENRICH_POLL_MS = 4000;
 
-type View = "tracks" | "albums";
+type View = "tracks" | "list" | "albums";
+const VIEWS: { value: View; label: string }[] = [
+  { value: "tracks", label: "Обложки" },
+  { value: "list", label: "Список" },
+  { value: "albums", label: "Альбомы" },
+];
+
+function parseView(value: string | null): View {
+  return VIEWS.some((option) => option.value === value) ? value as View : "tracks";
+}
+
+function parseFilter(value: string | null): CatalogFilter {
+  return CATALOG_FILTERS.some((option) => option.value === value) ? value as CatalogFilter : "all";
+}
 type CatalogAlbum = { key: string; title: string; artist: string; year: number | null; tracks: CatalogTrack[]; withFile: number; cover: CatalogTrack };
 
 function groupAlbums(items: CatalogTrack[]): CatalogAlbum[] {
@@ -43,6 +58,14 @@ function groupAlbums(items: CatalogTrack[]): CatalogAlbum[] {
   for (const album of albums.values()) album.artist = catalogAlbumArtist(album.tracks.map((track) => track.artist_name));
   return [...albums.values()].sort((a, b) => a.artist.localeCompare(b.artist, "ru") || a.title.localeCompare(b.title, "ru"));
 }
+
+const FILTER_SUMMARY: Record<CatalogFilter, string> = {
+  all: "в каталоге. Обложки и ссылки — из Apple Music; файлы можно перетащить прямо на карточку.",
+  with_file: "с файлом в медиатеке.",
+  without_file: "без файла. Перетащите аудиофайл на трек, чтобы добавить его.",
+  enriched: "найдено в Apple Music: у них есть обложки и ссылки.",
+  not_found: "не найдено в Apple Music. Показаны данные из экспорта; найти трек вручную можно по ссылкам в списке.",
+};
 
 function trackCountText(count: number) {
   const tens = count % 100;
@@ -71,11 +94,24 @@ function CatalogAlbumCard({ album }: { album: CatalogAlbum }) {
 }
 
 export default function MusicCatalogPage() {
+  return <Suspense fallback={<div className="content-page"><PageLoader rows={6} /></div>}><MusicCatalog /></Suspense>;
+}
+
+function MusicCatalog() {
   const { user } = useAuth();
-  const [view, setView] = useState<View>("tracks");
-  const [filter, setFilter] = useState<CatalogFilter>("all");
-  const [query, setQuery] = useState("");
-  const [term, setTerm] = useState("");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // View, filter and search live in the URL so other pages can link straight to a list.
+  const view = parseView(searchParams.get("view"));
+  const filter = parseFilter(searchParams.get("status"));
+  const term = searchParams.get("q")?.trim() ?? "";
+  const [query, setQuery] = useState(term);
+  const [shownTerm, setShownTerm] = useState(term);
+  if (term !== shownTerm) {
+    setShownTerm(term);
+    setQuery(term);
+  }
   const [items, setItems] = useState<CatalogTrack[] | null>(null);
   const [pages, setPages] = useState({ loaded: 0, total: 0, count: 0 });
   const [albumItems, setAlbumItems] = useState<CatalogTrack[] | null>(null);
@@ -83,10 +119,28 @@ export default function MusicCatalogPage() {
   const [error, setError] = useState("");
   const loadedPages = useRef(0);
 
+  // Quick successive changes must build on each other, not on a URL that has not updated yet.
+  const requested = useRef<Record<"view" | "status" | "q", string>>({ view, status: filter, q: term });
   useEffect(() => {
-    const timer = window.setTimeout(() => setTerm(query.trim()), 300);
+    requested.current = { view, status: filter, q: term };
+  }, [view, filter, term]);
+  const navigate = useCallback((changes: Partial<Record<"view" | "status" | "q", string>>) => {
+    const state = { ...requested.current, ...changes };
+    requested.current = state;
+    const next = new URLSearchParams();
+    if (state.view !== "tracks") next.set("view", state.view);
+    if (state.status !== "all") next.set("status", state.status);
+    if (state.q) next.set("q", state.q);
+    const search = next.toString();
+    router.replace(search ? `${pathname}?${search}` : pathname, { scroll: false });
+  }, [pathname, router]);
+
+  useEffect(() => {
+    const value = query.trim();
+    if (value === term) return;
+    const timer = window.setTimeout(() => navigate({ q: value }), 300);
     return () => window.clearTimeout(timer);
-  }, [query]);
+  }, [navigate, query, term]);
 
   const params = useCallback((page: number) => {
     const search = new URLSearchParams({ status: filter, page: String(page), page_size: String(PAGE_SIZE) });
@@ -181,7 +235,7 @@ export default function MusicCatalogPage() {
           <div>
             <div className="eyebrow">musicLib · Каталог</div>
             <h1>Каталог</h1>
-            <p>{items === null ? "Загружаем треки…" : emptyLibrary ? "Здесь собираются треки из перенесённой фонотеки — с файлами и без." : `${trackCountText(pages.count)}${filter === "all" && !term ? " в каталоге" : " найдено"}. Обложки и ссылки — из Apple Music; файлы можно перетащить прямо на карточку.`}</p>
+            <p>{items === null ? "Загружаем треки…" : emptyLibrary ? "Здесь собираются треки из перенесённой фонотеки — с файлами и без." : term ? `По запросу «${term}»: ${trackCountText(pages.count)}.` : `${trackCountText(pages.count)} ${FILTER_SUMMARY[filter]}`}</p>
           </div>
           <div className="page-actions">
             <Link className="button" href="/music/transfer"><ArrowRightLeft size={16} />Перенести фонотеку</Link>
@@ -191,8 +245,9 @@ export default function MusicCatalogPage() {
         {!emptyLibrary && (
           <div className="catalog-toolbar">
             <div className="catalog-segmented" role="tablist" aria-label="Вид каталога">
-              <button type="button" role="tab" aria-selected={view === "tracks"} className={view === "tracks" ? "active" : ""} onClick={() => setView("tracks")}>Треки</button>
-              <button type="button" role="tab" aria-selected={view === "albums"} className={view === "albums" ? "active" : ""} onClick={() => setView("albums")}>Альбомы</button>
+              {VIEWS.map((option) => (
+                <button key={option.value} type="button" role="tab" aria-selected={view === option.value} className={view === option.value ? "active" : ""} onClick={() => navigate({ view: option.value })}>{option.label}</button>
+              ))}
             </div>
             <label className="catalog-search">
               <Search size={16} />
@@ -200,7 +255,7 @@ export default function MusicCatalogPage() {
             </label>
             <div className="catalog-filters" role="group" aria-label="Фильтр каталога">
               {CATALOG_FILTERS.map((option) => (
-                <button key={option.value} type="button" aria-pressed={filter === option.value} className={filter === option.value ? "active" : ""} onClick={() => setFilter(option.value)}>{option.label}</button>
+                <button key={option.value} type="button" aria-pressed={filter === option.value} className={filter === option.value ? "active" : ""} onClick={() => navigate({ status: option.value })}>{option.label}</button>
               ))}
             </div>
           </div>
@@ -214,12 +269,14 @@ export default function MusicCatalogPage() {
             description="Загрузите экспорт фонотеки Apple Music — здесь появятся все треки с обложками, даже те, для которых ещё нет файла."
             action={<Link className="button primary" href="/music/transfer" style={{ marginTop: 16 }}><ArrowRightLeft size={16} />Перенести фонотеку</Link>}
           />
-        ) : view === "tracks" ? (
+        ) : view !== "albums" ? (
           items === null ? <CatalogSkeleton /> : items.length ? (
             <>
-              <div className="catalog-grid" aria-label="Треки каталога">
-                {items.map((item) => <CatalogCard key={item.id} item={item} canUpload={canUpload} onUpdated={updateItem} />)}
-              </div>
+              {view === "list" ? <CatalogList items={items} canUpload={canUpload} onUpdated={updateItem} /> : (
+                <div className="catalog-grid" aria-label="Треки каталога">
+                  {items.map((item) => <CatalogCard key={item.id} item={item} canUpload={canUpload} onUpdated={updateItem} />)}
+                </div>
+              )}
               {pages.loaded < pages.total && (
                 <div className="catalog-more">
                   <button className="button" type="button" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "Загружаем…" : "Показать ещё"}</button>

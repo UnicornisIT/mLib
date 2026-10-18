@@ -109,6 +109,12 @@ def test_upload_into_catalog_track_ignores_differing_tags(
     without = authenticated_client.get("/api/music/transfer/tracks", params={"status": "without_file"}).json()
     assert [item["id"] for item in without["items"]] == [second_card.id]
     assert authenticated_client.get("/api/music/transfer/tracks", params={"q": "друг"}).json()["total"] == 1
+    second_card.enrich_status = "not_found"
+    db.commit()
+    found = authenticated_client.get("/api/music/transfer/tracks", params={"status": "enriched"}).json()
+    assert [item["id"] for item in found["items"]] == [card.id]
+    missing = authenticated_client.get("/api/music/transfer/tracks", params={"status": "not_found"}).json()
+    assert [item["id"] for item in missing["items"]] == [second_card.id]
 
 
 def test_upload_into_catalog_track_reuses_existing_unlinked_file(
