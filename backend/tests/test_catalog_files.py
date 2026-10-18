@@ -231,6 +231,9 @@ def test_linked_track_exposes_catalog_data_without_touching_tags(
     assert track["title"] == "track01"
     assert track["artist"]["name"] == "Unknown artist"
     assert track["artwork_id"] is None
+    # "Unknown artist" would need attention, but catalog data is what is shown for a linked file.
+    assert track["needs_attention"] is False
+    assert authenticated_client.get("/api/music/tracks/attention-summary").json() == {"total": 0}
     catalog = track["catalog"]
     assert (catalog["title"], catalog["artist_name"], catalog["album_title"]) == (
         "Искала",
