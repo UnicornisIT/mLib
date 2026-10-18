@@ -8,6 +8,36 @@ import type { TransferJob, TransferSummary } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 
 const POLL_INTERVAL_MS = 2000;
+const ACCEPTED_EXTENSIONS = [".csv", ".txt"];
+// Service names as TuneMyMusic writes them into "<Service> - id"; see backend transfer/sources.py.
+const SOURCE_LABELS: Record<string, string> = {
+  apple_music: "Apple Music",
+  apple_music_csv: "Apple Music",
+  spotify: "Spotify",
+  youtube: "YouTube",
+  youtube_music: "YouTube Music",
+  deezer: "Deezer",
+  tidal: "TIDAL",
+  amazon_music: "Amazon Music",
+  soundcloud: "SoundCloud",
+  yandex_music: "Яндекс Музыка",
+  qobuz: "Qobuz",
+  beatport: "Beatport",
+  beatsource: "Beatsource",
+  pandora: "Pandora",
+  anghami: "Anghami",
+  kkbox: "KKBOX",
+  napster: "Napster",
+  boomplay: "Boomplay",
+  soundmachine: "SoundMachine",
+  lastfm: "Last.fm",
+  text: "Текстовый список",
+  unknown: "TuneMyMusic",
+};
+
+function sourceLabel(source: string) {
+  return SOURCE_LABELS[source] ?? source.replace(/_/g, " ");
+}
 const ACTIVE_STATUSES = new Set<TransferJob["status"]>(["queued", "enriching"]);
 const STATUS_LABELS: Record<TransferJob["status"], string> = {
   queued: "В очереди",
@@ -81,9 +111,9 @@ export function LibraryTransfer() {
   const chooseFile = (files: FileList | null) => {
     const next = files?.[0];
     if (!next) return;
-    if (!next.name.toLowerCase().endsWith(".csv")) {
+    if (!ACCEPTED_EXTENSIONS.some((extension) => next.name.toLowerCase().endsWith(extension))) {
       setFile(null);
-      setError("Нужен файл в формате CSV — экспорт фонотеки Apple Music");
+      setError("Нужен файл CSV или TXT — экспорт из TuneMyMusic");
       return;
     }
     setError("");
@@ -132,7 +162,7 @@ export function LibraryTransfer() {
         <div>
           <div className="eyebrow">Библиотека</div>
           <h1>Перенести фонотеку</h1>
-          <p>Загрузите экспорт Apple Music в CSV — mLib соберёт каталог треков с названиями, альбомами и обложками. Файлы можно добавить позже, каждый в свою карточку.</p>
+          <p>Перенесите музыку из Spotify, Apple Music, YouTube Music, Deezer, TIDAL и других сервисов через TuneMyMusic — mLib соберёт каталог треков с названиями, альбомами и обложками. Файлы можно добавить позже, каждый в свою карточку.</p>
         </div>
         {summary && summary.total > 0 && (
           <div className="page-actions">
@@ -151,12 +181,17 @@ export function LibraryTransfer() {
 
       {user?.is_admin ? (
         <section className="transfer-panel" aria-label="Загрузка экспорта">
+          <ol className="transfer-steps" aria-label="Как перенести фонотеку">
+            <li><strong>Откройте <a href="https://www.tunemymusic.com/" target="_blank" rel="noreferrer">TuneMyMusic</a></strong><span>и выберите сервис, откуда переносите: Spotify, Apple Music, YouTube Music, Deezer, TIDAL, Amazon Music, SoundCloud и другие.</span></li>
+            <li><strong>Выберите плейлисты, любимые треки и альбомы</strong><span>а местом назначения — «Экспорт в файл» (CSV). Подойдёт и TXT со строками «Исполнитель - Название».</span></li>
+            <li><strong>Загрузите файл сюда</strong><span>Треки Apple Music найдутся за минуту; треки других сервисов ищутся в Apple Music по названию — примерно 17 в минуту, в фоне.</span></li>
+          </ol>
           <input
             ref={inputRef}
             hidden
             type="file"
-            accept=".csv,text/csv"
-            aria-label="Файл экспорта Apple Music"
+            accept=".csv,.txt,text/csv,text/plain"
+            aria-label="Файл экспорта TuneMyMusic"
             onChange={(event: ChangeEvent<HTMLInputElement>) => { chooseFile(event.target.files); event.target.value = ""; }}
           />
           <div
@@ -171,8 +206,8 @@ export function LibraryTransfer() {
           >
             <div>
               {file ? <FileSpreadsheet size={34} color="var(--accent)" /> : <UploadCloud size={34} color="var(--accent)" />}
-              <h3>{file ? file.name : "Перетащите CSV-файл сюда"}</h3>
-              <p>{file ? "Готово к загрузке" : "или нажмите, чтобы выбрать экспорт фонотеки Apple Music"}</p>
+              <h3>{file ? file.name : "Перетащите файл CSV или TXT сюда"}</h3>
+              <p>{file ? "Готово к загрузке" : "или нажмите, чтобы выбрать экспорт из TuneMyMusic"}</p>
             </div>
           </div>
           <div className="toggle-row">
@@ -205,7 +240,7 @@ export function LibraryTransfer() {
           <div className="transfer-job-header">
             <div>
               <strong>{STATUS_LABELS[job.status]}</strong>
-              <span>{job.filename}</span>
+              <span>{sourceLabel(job.source)} · {job.filename}</span>
             </div>
             <div className="page-actions">
               {active && user?.is_admin && <button className="button" type="button" disabled={busy} onClick={() => void act("cancel")}><X size={15} />Отменить</button>}

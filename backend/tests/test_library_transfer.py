@@ -17,7 +17,7 @@ from app.modules.music.transfer.itunes import (
     sized_artwork_url,
     spotify_search_url,
 )
-from app.modules.music.transfer.sources import AppleMusicCsvSource, LibraryParseError
+from app.modules.music.transfer.sources import FAVORITES_PLAYLIST, LibraryParseError, TuneMyMusicSource
 from app.modules.music.transfer.worker import TransferWorker
 
 # Synthetic export: BOM, Cyrillic, quoted commas, a duplicate ISRC under another Apple id,
@@ -65,6 +65,17 @@ class FakeLookup:
         storefront = self.catalog.get(country, {})
         return {track_id: storefront[track_id] for track_id in track_ids if track_id in storefront}
 
+    def search(self, term: str, country: str) -> list[dict]:
+        self.calls.append(([term], country))
+        if self.failures:
+            raise self.failures.pop(0)
+        words = set(term.casefold().split())
+        return [
+            payload
+            for payload in self.catalog.get(country, {}).values()
+            if words & set(f"{payload['artistName']} {payload['trackName']}".casefold().split())
+        ]
+
 
 DEFAULT_CATALOG = {
     "ru": {
@@ -95,21 +106,25 @@ def upload(client: TestClient, content: str | bytes = SAMPLE_CSV, filename: str 
 
 
 def test_apple_music_parser_handles_bom_quotes_cyrillic_and_duplicates() -> None:
-    parsed = AppleMusicCsvSource().parse(SAMPLE_CSV.encode("utf-8"))
+    parsed = TuneMyMusicSource().parse(SAMPLE_CSV.encode("utf-8"))
 
+    assert parsed.source == "apple_music"
     assert parsed.rows_total == 7
     assert parsed.invalid_rows == 1
-    assert [track.external_id for track in parsed.tracks] == ["1001", "1002", "1003", "1004"]
+    assert [track.apple_id for track in parsed.tracks] == ["1001", "1002", "1003", "1004"]
     hello = parsed.tracks[1]
     assert (hello.title, hello.artist, hello.album) == ("Hello, World", "Тестовый артист", "Альбом, часть 1")
     assert parsed.tracks[0].isrc == "RUA119900001"
-    assert parsed.playlists == {"Дорога": ["1001", "1002"], "Ev": ["1003", "1004", "1001"]}
+    assert parsed.playlists == {
+        "Дорога": ["apple:1001", "apple:1002"],
+        "Ev": ["apple:1003", "apple:1004", "apple:1001"],
+    }
 
 
 def test_apple_music_parser_accepts_other_column_order_delimiter_and_encoding() -> None:
     content = "apple - id;isrc;ARTIST NAME;album;track name\n2001;ru-a11-99-00002;Кино;Группа крови;Кукушка\n"
     for encoded in (content.encode("cp1251"), content.encode("utf-16")):
-        parsed = AppleMusicCsvSource().parse(encoded)
+        parsed = TuneMyMusicSource().parse(encoded)
         assert parsed.tracks[0].title == "Кукушка"
         assert parsed.tracks[0].artist == "Кино"
         assert parsed.tracks[0].isrc == "RUA119900002"
@@ -120,21 +135,22 @@ def test_apple_music_parser_accepts_other_column_order_delimiter_and_encoding() 
     ("content", "message"),
     [
         (b"", "Файл пустой"),
-        (b"Track name,Artist name,Album\nA,B,C\n", "нет обязательных колонок «ISRC», «Apple - id»"),
+        (b"Name,Singer,Album\nA,B,C\n", "нет обязательных колонок «Track name», «Artist name»"),
+        (b"Track name,Album\nA,C\n", "нет обязательных колонок «Artist name»"),
         (b"Track name,Artist name,Album,ISRC,Apple - id\n", "нет ни одной строки"),
-        (b"Track name,Artist name,Album,ISRC,Apple - id\n,,,,\nA,B,C,D,x\n", "числового «Apple - id»"),
+        (b"Track name,Artist name,Album,ISRC,Apple - id\n,,,,\n,B,C,D,1\n", "нет названия трека и исполнителя"),
     ],
 )
 def test_apple_music_parser_reports_errors_in_russian(content: bytes, message: str) -> None:
     with pytest.raises(LibraryParseError, match=message):
-        AppleMusicCsvSource().parse(content)
+        TuneMyMusicSource().parse(content)
 
 
 @pytest.mark.skipif(not os.environ.get("MLIB_APPLE_MUSIC_CSV"), reason="personal export is not committed")
 def test_apple_music_parser_on_real_export() -> None:
-    parsed = AppleMusicCsvSource().parse(Path(os.environ["MLIB_APPLE_MUSIC_CSV"]).read_bytes())
+    parsed = TuneMyMusicSource().parse(Path(os.environ["MLIB_APPLE_MUSIC_CSV"]).read_bytes())
     assert parsed.invalid_rows == 0
-    assert len({track.external_id for track in parsed.tracks}) == len(parsed.tracks)
+    assert len({track.key for track in parsed.tracks}) == len(parsed.tracks)
     isrcs = [track.isrc for track in parsed.tracks if track.isrc]
     assert len(set(isrcs)) == len(isrcs)
 
@@ -202,12 +218,12 @@ def test_transfer_reupload_is_idempotent_and_never_deletes(authenticated_client:
 
 
 def test_transfer_rejects_invalid_files_with_russian_errors(authenticated_client: TestClient) -> None:
-    missing = upload(authenticated_client, "Track name,Artist name\nA,B\n")
+    missing = upload(authenticated_client, "Name,Singer\nA,B\n")
     assert missing.status_code == 422
     assert "нет обязательных колонок" in missing.json()["detail"]
     wrong_type = upload(authenticated_client, SAMPLE_CSV, filename="library.xlsx")
     assert wrong_type.status_code == 422
-    assert wrong_type.json()["detail"] == "Загрузите экспорт фонотеки в формате CSV"
+    assert wrong_type.json()["detail"] == "Загрузите файл TuneMyMusic в формате CSV или TXT"
 
 
 def test_transfer_retry_and_cancel(authenticated_client: TestClient, db: Session) -> None:
@@ -313,3 +329,98 @@ def test_storefronts_setting_accepts_comma_separated_values() -> None:
 
     assert Settings(itunes_storefronts=" RU, us ,tr ").itunes_storefronts == ["ru", "us", "tr"]
     assert Settings().itunes_storefronts == ["ru", "us", "tr"]
+
+
+SPOTIFY_CSV = (
+    "Track name,Artist name,Album,Playlist name,Type,ISRC,Spotify \u2013 id\n"
+    "Get Lucky (feat. Pharrell Williams and Nile Rodgers),Daft Punk,Random Access Memories,,Favorite,"
+    "USQX91300108,69kOkLUCkxIZYexIgSG8rq\n"
+    "Get Lucky (feat. Pharrell Williams and Nile Rodgers),Daft Punk,Random Access Memories,Утро,Playlist,"
+    "USQX91300108,69kOkLUCkxIZYexIgSG8rq\n"
+    "Teardrop,Massive Attack,Mezzanine,Утро,Playlist,,67Hna13dNDkZvBpTXRIaOJ\n"
+    "Nothing Like It,Nobody Known,,Утро,Playlist,,0000000000000000000000\n"
+)
+
+SEARCH_CATALOG = {
+    "ru": {
+        "617154366": lookup_payload("617154366", "Get Lucky", "Daft Punk, Pharrell Williams & Nile Rodgers"),
+        "724466700": lookup_payload("724466700", "Teardrop", "Massive Attack"),
+        "999": lookup_payload("999", "Teardrop (Live)", "Some Cover Band"),
+    }
+}
+
+
+def test_tunemymusic_parser_reads_any_source_service_and_favorites() -> None:
+    parsed = TuneMyMusicSource().parse(SPOTIFY_CSV.encode("utf-8"))
+
+    assert parsed.source == "spotify"
+    assert (parsed.rows_total, parsed.invalid_rows, len(parsed.tracks)) == (4, 0, 3)
+    lucky = parsed.tracks[0]
+    assert (lucky.apple_id, lucky.service, lucky.service_id, lucky.isrc) == (
+        None,
+        "spotify",
+        "69kOkLUCkxIZYexIgSG8rq",
+        "USQX91300108",
+    )
+    assert parsed.playlists == {
+        FAVORITES_PLAYLIST: ["spotify:69kOkLUCkxIZYexIgSG8rq"],
+        "Утро": [
+            "spotify:69kOkLUCkxIZYexIgSG8rq",
+            "spotify:67Hna13dNDkZvBpTXRIaOJ",
+            "spotify:0000000000000000000000",
+        ],
+    }
+
+    youtube = TuneMyMusicSource().parse("Track name;Artist name;YouTube Music - id\nКукушка;Кино;\n".encode())
+    assert youtube.source == "youtube_music"
+    assert youtube.tracks[0].key == "name:кино|кукушка"
+
+
+def test_tunemymusic_text_export_reads_artist_title_lines() -> None:
+    text = "1. Кино - Группа крови\nDaft Punk – Get Lucky\n\nбез разделителя\nКино - Группа крови\n"
+    parsed = TuneMyMusicSource().parse(text.encode("utf-8"), "playlist.txt")
+
+    assert parsed.source == "text"
+    assert (parsed.rows_total, parsed.invalid_rows) == (4, 1)
+    assert [(track.artist, track.title) for track in parsed.tracks] == [
+        ("Кино", "Группа крови"),
+        ("Daft Punk", "Get Lucky"),
+    ]
+
+
+def test_transfer_from_other_services_searches_apple_music(authenticated_client: TestClient, db: Session) -> None:
+    job = upload(authenticated_client, SPOTIFY_CSV, create_playlists="true").json()
+    assert (job["source"], job["added"], job["status"]) == ("spotify", 3, "enriching")
+
+    fake = run_worker(FakeLookup(SEARCH_CATALOG))
+
+    assert all(len(ids) == 1 for ids, _ in fake.calls)
+    lucky = db.scalar(select(CatalogTrack).where(CatalogTrack.source_track_id == "69kOkLUCkxIZYexIgSG8rq"))
+    assert (lucky.enrich_status, lucky.apple_track_id, lucky.source_service) == ("enriched", "617154366", "spotify")
+    assert lucky.album_title == "Get Lucky - Single"
+    teardrop = db.scalar(select(CatalogTrack).where(CatalogTrack.title == "Teardrop"))
+    assert (teardrop.apple_track_id, teardrop.artist_name) == ("724466700", "Massive Attack")
+    unknown = db.scalar(select(CatalogTrack).where(CatalogTrack.artist_name == "Nobody Known"))
+    assert (unknown.enrich_status, unknown.apple_track_id) == ("not_found", None)
+    done = authenticated_client.get(f"/api/music/transfer/{job['id']}").json()
+    assert (done["status"], done["enriched"], done["not_found"]) == ("completed", 2, 1)
+    playlists = {item["name"] for item in authenticated_client.get("/api/music/playlists").json()}
+    assert {FAVORITES_PLAYLIST, "Утро"} <= playlists
+
+    again = upload(authenticated_client, SPOTIFY_CSV).json()
+    assert (again["added"], again["existing"], again["status"]) == (0, 3, "completed")
+    text = upload(authenticated_client, "Massive Attack - Teardrop\n", filename="list.txt").json()
+    assert (text["source"], text["added"], text["existing"]) == ("text", 0, 1)
+
+
+def test_search_result_must_match_artist_and_title() -> None:
+    from app.modules.music.transfer.worker import best_search_match
+
+    results = [
+        lookup_payload("1", "Teardrop", "Some Cover Band"),
+        lookup_payload("2", "Get Lucky (Radio Edit)", "Daft Punk"),
+        lookup_payload("3", "Get Lucky", "Daft Punk & Pharrell Williams"),
+    ]
+    assert best_search_match(results, "Massive Attack", "Teardrop") is None
+    assert best_search_match(results, "Daft Punk", "Get Lucky")["trackId"] == 3
+    assert best_search_match(results[:2], "Daft Punk", "Get Lucky (feat. Pharrell Williams)")["trackId"] == 2

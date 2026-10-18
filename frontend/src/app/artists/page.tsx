@@ -77,7 +77,7 @@ export default function ArtistsPage() {
           )}
         </>
       ) : (
-        <EmptyState title="Исполнителей пока нет" description="Они появятся из метаданных загруженных файлов или после переноса фонотеки Apple Music." />
+        <EmptyState title="Исполнителей пока нет" description="Они появятся из метаданных загруженных файлов или после переноса фонотеки через TuneMyMusic." />
       )}
     </div>
   );

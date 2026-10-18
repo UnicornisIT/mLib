@@ -229,7 +229,7 @@ function MusicCatalog() {
         {emptyLibrary ? (
           <EmptyState
             title="Каталог пока пуст"
-            description="Загрузите экспорт фонотеки Apple Music — здесь появятся все треки с обложками, даже те, для которых ещё нет файла."
+            description="Перенесите фонотеку из Spotify, Apple Music, YouTube Music или другого сервиса через TuneMyMusic — здесь появятся все треки с обложками, даже те, для которых ещё нет файла."
             action={<Link className="button primary" href="/music/transfer" style={{ marginTop: 16 }}><ArrowRightLeft size={16} />Перенести фонотеку</Link>}
           />
         ) : view !== "albums" ? (

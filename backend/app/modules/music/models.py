@@ -143,10 +143,15 @@ class CatalogTrack(MusicBase):
     __table_args__ = (
         Index("idx_music_catalog_tracks_identity", "normalized_artist", "normalized_title"),
         Index("idx_music_catalog_tracks_enrich", "transfer_job_id", "enrich_status"),
+        Index("idx_music_catalog_tracks_source", "source_service", "source_track_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4)
-    apple_track_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    # Known for Apple Music exports and after a successful search; other sources start without it.
+    apple_track_id: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True)
+    # Service of the export ("spotify", "youtube_music", ...) and the track id there, when the export has one.
+    source_service: Mapped[str | None] = mapped_column(String(40))
+    source_track_id: Mapped[str | None] = mapped_column(String(128))
     isrc: Mapped[str | None] = mapped_column(String(32), index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     artist_name: Mapped[str] = mapped_column(String(500), nullable=False)

@@ -113,7 +113,7 @@ export type ImportJob = {
 };
 export type CatalogTrackBrief = {
   id: string;
-  apple_track_id: string;
+  apple_track_id: string | null;
   isrc: string | null;
   title: string;
   artist_name: string;

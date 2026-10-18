@@ -19,7 +19,7 @@ from app.modules.music.transfer.service import (
     import_playlists,
     pending_count,
 )
-from app.modules.music.transfer.sources import MAX_SOURCE_BYTES, SOURCES, AppleMusicCsvSource, LibraryParseError
+from app.modules.music.transfer.sources import MAX_SOURCE_BYTES, SOURCES, LibraryParseError, TuneMyMusicSource
 
 router = APIRouter(prefix="/transfer", tags=["music transfer"])
 
@@ -65,17 +65,17 @@ async def start_transfer(
 ) -> TransferJobRead:
     filename = Path(file.filename or "library.csv").name
     if Path(filename).suffix.lower() not in {".csv", ".txt"}:
-        raise HTTPException(status_code=422, detail="Загрузите экспорт фонотеки в формате CSV")
+        raise HTTPException(status_code=422, detail="Загрузите файл TuneMyMusic в формате CSV или TXT")
     data = await file.read(MAX_SOURCE_BYTES + 1)
-    source = SOURCES[AppleMusicCsvSource.name]
+    source = SOURCES[TuneMyMusicSource.name]
     try:
-        parsed = source.parse(data)
+        parsed = source.parse(data, filename)
     except LibraryParseError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     job = TransferJob(
         owner_id=user.id,
-        source=source.name,
+        source=parsed.source,
         filename=filename,
         status="queued",
         storefronts=",".join(settings.itunes_storefronts) or "us",

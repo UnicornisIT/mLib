@@ -26,7 +26,7 @@ class CatalogTrackBrief(BaseModel):
     """Catalog data shown for a file linked to a catalog track; the file's own tags stay untouched."""
 
     id: str
-    apple_track_id: str
+    apple_track_id: str | None = None
     isrc: str | None = None
     title: str
     artist_name: str

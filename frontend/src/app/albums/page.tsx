@@ -84,7 +84,7 @@ export default function AlbumsPage() {
         </div>
       )}
       {!entries || entries.length ? null : (
-        <EmptyState title="Альбомов пока нет" description="Альбомы появятся из метаданных загруженных файлов или после переноса фонотеки Apple Music." />
+        <EmptyState title="Альбомов пока нет" description="Альбомы появятся из метаданных загруженных файлов или после переноса фонотеки через TuneMyMusic." />
       )}
     </div>
   );

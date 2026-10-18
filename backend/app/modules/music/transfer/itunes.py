@@ -9,6 +9,9 @@ from urllib.request import Request, urlopen
 logger = logging.getLogger(__name__)
 
 LOOKUP_URL = "https://itunes.apple.com/lookup"
+SEARCH_URL = "https://itunes.apple.com/search"
+# The search endpoint allows roughly 20 requests a minute; lookup by id is used whenever an id is known.
+SEARCH_LIMIT = 10
 # Verified: one lookup request accepts at least 200 comma-separated ids; unknown ids are omitted.
 LOOKUP_BATCH_SIZE = 100
 ARTWORK_SIZE_PATTERN = re.compile(r"/\d+x\d+(bb)?\.(jpg|jpeg|png|webp)$", re.IGNORECASE)
@@ -25,38 +28,51 @@ class LookupRateLimitedError(TrackLookupError):
 class TrackLookupClient(Protocol):
     def lookup(self, track_ids: list[str], country: str) -> dict[str, dict[str, Any]]: ...
 
+    def search(self, term: str, country: str) -> list[dict[str, Any]]: ...
+
 
 class ItunesLookupClient:
     """iTunes Search API lookup by trackId; needs no key and no extra dependencies."""
 
-    def __init__(self, base_url: str = LOOKUP_URL, timeout: float = 20) -> None:
+    def __init__(self, base_url: str = LOOKUP_URL, timeout: float = 20, search_url: str = SEARCH_URL) -> None:
         self.base_url = base_url
+        self.search_url = search_url
         self.timeout = timeout
 
     def lookup(self, track_ids: list[str], country: str) -> dict[str, dict[str, Any]]:
         if not track_ids:
             return {}
-        query = urlencode({"id": ",".join(track_ids), "country": country, "entity": "song"})
-        request = Request(f"{self.base_url}?{query}", headers={"Accept": "application/json"})
-        try:
-            with urlopen(request, timeout=self.timeout) as response:  # noqa: S310 - fixed Apple origin
-                payload = json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            logger.warning("iTunes lookup failed for %s ids in %s: HTTP %s", len(track_ids), country, exc.code)
-            if exc.code in {403, 429, 503}:
-                raise LookupRateLimitedError from exc
-            raise TrackLookupError from exc
-        except (URLError, TimeoutError, OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-            logger.warning("iTunes lookup failed for %s ids in %s: %s", len(track_ids), country, exc)
-            raise TrackLookupError from exc
-        results = payload.get("results") if isinstance(payload, dict) else None
-        if not isinstance(results, list):
-            return {}
+        results = self._get(self.base_url, {"id": ",".join(track_ids), "country": country, "entity": "song"})
         return {
             str(item["trackId"]): item
             for item in results
             if isinstance(item, dict) and item.get("wrapperType") == "track" and item.get("trackId")
         }
+
+    def search(self, term: str, country: str) -> list[dict[str, Any]]:
+        """Songs found by free text ("artist title"); used for exports from services other than Apple Music."""
+        query = {"term": term, "country": country, "entity": "song", "media": "music", "limit": SEARCH_LIMIT}
+        return [
+            item
+            for item in self._get(self.search_url, query)
+            if isinstance(item, dict) and item.get("wrapperType") == "track" and item.get("trackId")
+        ]
+
+    def _get(self, url: str, params: dict[str, Any]) -> list[Any]:
+        request = Request(f"{url}?{urlencode(params)}", headers={"Accept": "application/json"})
+        try:
+            with urlopen(request, timeout=self.timeout) as response:  # noqa: S310 - fixed Apple origin
+                payload = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            logger.warning("iTunes request to %s failed: HTTP %s", url, exc.code)
+            if exc.code in {403, 429, 503}:
+                raise LookupRateLimitedError from exc
+            raise TrackLookupError from exc
+        except (URLError, TimeoutError, OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            logger.warning("iTunes request to %s failed: %s", url, exc)
+            raise TrackLookupError from exc
+        results = payload.get("results") if isinstance(payload, dict) else None
+        return results if isinstance(results, list) else []
 
 
 def _clean_url(value: Any) -> str | None:

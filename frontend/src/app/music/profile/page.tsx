@@ -101,7 +101,7 @@ export default function MusicProfilePage() {
             <span className="profile-action-icon"><ArrowRightLeft size={20} /></span>
             <span className="profile-action-copy">
               <strong>Перенести фонотеку</strong>
-              <span>{catalogCount ? catalogCountText(catalogCount) : "Загрузите экспорт Apple Music, чтобы собрать каталог треков."}</span>
+              <span>{catalogCount ? catalogCountText(catalogCount) : "Перенесите фонотеку из любого сервиса через TuneMyMusic, чтобы собрать каталог треков."}</span>
             </span>
             <span className="profile-action-side">
               <span className="profile-action-count">{catalogCount ?? "—"}</span>

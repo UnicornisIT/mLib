@@ -162,8 +162,8 @@ test.describe("release smoke", () => {
     await page.getByRole("link", { name: /Перенести фонотеку/ }).click();
     await expect(page.getByRole("heading", { name: "Перенести фонотеку" })).toBeVisible();
 
-    const input = page.getByLabel("Файл экспорта Apple Music");
-    await input.setInputFiles({ name: "broken.csv", mimeType: "text/csv", buffer: Buffer.from("Track name,Artist name\nA,B\n") });
+    const input = page.getByLabel("Файл экспорта TuneMyMusic");
+    await input.setInputFiles({ name: "broken.csv", mimeType: "text/csv", buffer: Buffer.from("Name,Singer\nA,B\n") });
     await page.getByRole("button", { name: "Перенести", exact: true }).click();
     await expect(page.getByRole("main").getByRole("alert")).toContainText("нет обязательных колонок");
 
@@ -179,17 +179,30 @@ test.describe("release smoke", () => {
 
     const job = page.getByRole("region", { name: "Последний перенос" });
     await expect(job.getByText("Перенос завершён")).toBeVisible({ timeout: 30_000 });
-    await expect(job.getByText("library.csv")).toBeVisible();
+    await expect(job.getByText("Apple Music · library.csv")).toBeVisible();
     await expect(job.locator("div", { has: page.getByText("Добавлено", { exact: true }) }).getByRole("definition")).toHaveText("2");
     await expect(job.locator("div", { has: page.getByText("Строк в файле", { exact: true }) }).getByRole("definition")).toHaveText("3");
     await page.reload();
     await expect(page.getByRole("region", { name: "Последний перенос" }).getByText("library.csv")).toBeVisible();
 
+    // TuneMyMusic writes every source service to the same layout; only the id column differs.
+    const spotify = [
+      "Track name,Artist name,Album,Playlist name,Type,ISRC,Spotify \u2013 id",
+      "Teardrop,Massive Attack,Mezzanine,,Favorite,,67Hna13dNDkZvBpTXRIaOJ",
+      "Искала,Земфира,Земфира,,Favorite,RUA119900001,4uLU6hMCjMI75M1A2tKUQC",
+    ].join("\n");
+    await page.getByLabel("Файл экспорта TuneMyMusic").setInputFiles({ name: "spotify.csv", mimeType: "text/csv", buffer: Buffer.from(spotify) });
+    await page.getByRole("button", { name: "Перенести", exact: true }).click();
+    const spotifyJob = page.getByRole("region", { name: "Последний перенос" });
+    await expect(spotifyJob.getByText("Spotify · spotify.csv")).toBeVisible({ timeout: 30_000 });
+    await expect(spotifyJob.locator("div", { has: page.getByText("Добавлено", { exact: true }) }).getByRole("definition")).toHaveText("1");
+    await expect(spotifyJob.locator("div", { has: page.getByText("Уже было", { exact: true }) }).getByRole("definition")).toHaveText("1");
+
     // Catalog counters open a readable list of the catalog.
     await page.getByRole("link", { name: /треков в каталоге — открыть список/ }).click();
     await expect(page).toHaveURL(/\/music\/catalog\?view=list/);
     const list = page.getByRole("list", { name: "Список треков каталога" });
-    await expect(list.getByRole("listitem")).toHaveCount(2);
+    await expect(list.getByRole("listitem")).toHaveCount(3);
     await expect(list.getByRole("listitem", { name: "Искала — Земфира" }).getByText("Не найден в Apple")).toBeVisible();
     await expect(list.getByRole("listitem", { name: "Искала — Земфира" }).getByRole("link", { name: "Spotify" })).toHaveAttribute("href", /open\.spotify\.com\/search/);
     await page.getByRole("button", { name: "Найдены в Apple", exact: true }).click();
@@ -197,7 +210,7 @@ test.describe("release smoke", () => {
     await expect(page.getByText("Ничего не найдено")).toBeVisible();
 
     await page.goto("/music/profile");
-    await expect(page.getByRole("link", { name: /Перенести фонотеку/ })).toContainText("2 трека в каталоге");
+    await expect(page.getByRole("link", { name: /Перенести фонотеку/ })).toContainText("3 трека в каталоге");
     await page.goto("/music/playlists");
     await page.getByRole("button", { name: /Дорога/ }).click();
     await expect(page.getByRole("main").getByText("Искала")).toBeVisible();
@@ -216,7 +229,7 @@ test.describe("release smoke", () => {
     await page.goto("/music/catalog");
     await expect(page.getByRole("heading", { name: "Каталог", exact: true })).toBeVisible();
     const grid = page.getByLabel("Треки каталога");
-    await expect(grid.getByRole("article")).toHaveCount(2);
+    await expect(grid.getByRole("article")).toHaveCount(3);
     await expect(grid.getByRole("article", { name: "Искала — Земфира" }).getByText("Нет файла")).toBeVisible();
     await page.getByRole("button", { name: "С файлом", exact: true }).click();
     await expect(page.getByText("Ничего не найдено")).toBeVisible();
