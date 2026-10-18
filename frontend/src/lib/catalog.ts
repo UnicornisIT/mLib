@@ -30,13 +30,37 @@ export function catalogHref(id: string) {
   return `/music/catalog/${id}`;
 }
 
-export function catalogAlbumKey(item: Pick<CatalogTrack, "artist_name" | "album_title">) {
-  return `${item.artist_name}\u0000${item.album_title ?? ""}`;
+type AlbumIdentity = Pick<CatalogTrack, "artist_name" | "album_title" | "collection_id">;
+
+/** Apple's album id groups tracks that credit different artists ("Daft Punk & Pharrell Williams"). */
+export function catalogAlbumKey(item: AlbumIdentity) {
+  return item.collection_id ? `apple:${item.collection_id}` : `${item.artist_name}\u0000${item.album_title ?? ""}`;
 }
 
-export function catalogAlbumHref(item: Pick<CatalogTrack, "artist_name" | "album_title">) {
-  const params = new URLSearchParams({ artist: item.artist_name, title: item.album_title ?? "" });
+export function sameCatalogAlbum(item: AlbumIdentity, album: { collection: string | null; artist: string | null; title: string }) {
+  if (album.collection) return item.collection_id === album.collection;
+  return item.album_title === album.title && item.artist_name === album.artist;
+}
+
+export function catalogAlbumHref(item: AlbumIdentity) {
+  const params = new URLSearchParams({ title: item.album_title ?? "" });
+  if (item.collection_id) params.set("collection", item.collection_id);
+  else params.set("artist", item.artist_name);
   return `/music/catalog/album?${params}`;
+}
+
+/** The lead artist shared by an album's tracks: "Daft Punk & X" and "Daft Punk, Y" give "Daft Punk". */
+export function catalogAlbumArtist(names: string[]) {
+  const unique = [...new Set(names)];
+  if (unique.length <= 1) return unique[0] ?? "";
+  let prefix = unique[0];
+  for (const name of unique.slice(1)) {
+    let index = 0;
+    while (index < prefix.length && index < name.length && prefix[index] === name[index]) index += 1;
+    prefix = prefix.slice(0, index);
+  }
+  const lead = prefix.replace(/[\s,&]+$/u, "").trim();
+  return lead.length >= 2 ? lead : "Разные исполнители";
 }
 
 export function catalogDuration(durationMs: number | null) {

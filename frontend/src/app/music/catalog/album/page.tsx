@@ -10,7 +10,7 @@ import { CatalogHero, ExternalLinks } from "@/components/CatalogHero";
 import { EmptyState, PageLoader } from "@/components/EmptyState";
 import { useLibraryChanged } from "@/hooks/useLibraryChanged";
 import { api } from "@/lib/api";
-import { catalogArtworkSource, catalogDuration, catalogHref, loadAllCatalogTracks } from "@/lib/catalog";
+import { catalogAlbumArtist, catalogArtworkSource, catalogDuration, catalogHref, loadAllCatalogTracks, sameCatalogAlbum } from "@/lib/catalog";
 import type { CatalogTrack, Track } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { usePlayer } from "@/providers/PlayerProvider";
@@ -21,7 +21,8 @@ export default function CatalogAlbumPage() {
 
 function CatalogAlbum() {
   const searchParams = useSearchParams();
-  const artist = searchParams.get("artist") ?? "";
+  const collection = searchParams.get("collection");
+  const artistParam = searchParams.get("artist");
   const title = searchParams.get("title") ?? "";
   const { user } = useAuth();
   const player = usePlayer();
@@ -32,12 +33,12 @@ function CatalogAlbum() {
     try {
       // Search narrows the list by album title; the exact album is picked here.
       const found = await loadAllCatalogTracks(new URLSearchParams({ status: "all", q: title }));
-      setItems(found.filter((item) => item.album_title === title && item.artist_name === artist));
+      setItems(found.filter((item) => sameCatalogAlbum(item, { collection, artist: artistParam, title })));
       setError("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Не удалось загрузить альбом");
     }
-  }, [artist, title]);
+  }, [artistParam, collection, title]);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- state is set after the request resolves
   useEffect(() => { void load(); }, [load]);
   useLibraryChanged(useCallback(() => { void load(); }, [load]));
@@ -48,6 +49,7 @@ function CatalogAlbum() {
   if (!items) return <div className="content-page"><PageLoader rows={6} /></div>;
   if (!items.length) return <div className="content-page"><EmptyState title="Альбом не найден" description="В каталоге нет треков этого альбома." action={<Link className="button" href="/music/catalog" style={{ marginTop: 16 }}>К каталогу</Link>} /></div>;
 
+  const artist = catalogAlbumArtist(items.map((item) => item.artist_name));
   const cover = items.find((item) => item.artwork_id) ?? items.find((item) => item.artwork_url) ?? items[0];
   const year = items.find((item) => item.year)?.year;
   const withFile = items.filter((item) => item.has_file);
@@ -70,7 +72,7 @@ function CatalogAlbum() {
           {totalMs > 0 && <span>{Math.round(totalMs / 60000)} мин</span>}
           {withFile.length < items.length && <span className="catalog-pill">Без файла: {items.length - withFile.length}</span>}
         </p>
-        <div className="detail-actions">
+        <div className="catalog-actions">
           {withFile.length > 0 && <button className="button primary" type="button" onClick={() => void playAll()}><Play size={17} fill="currentColor" />Слушать</button>}
           <ExternalLinks appleMusicUrl={cover.apple_music_url} />
         </div>

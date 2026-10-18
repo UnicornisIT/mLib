@@ -118,6 +118,7 @@ export type CatalogTrackBrief = {
   title: string;
   artist_name: string;
   album_title: string | null;
+  collection_id: string | null;
   year: number | null;
   duration_ms: number | null;
   artwork_url: string | null;

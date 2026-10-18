@@ -31,6 +31,8 @@ class CatalogTrackBrief(BaseModel):
     title: str
     artist_name: str
     album_title: str | None = None
+    # Apple album id: tracks of one album may credit different artists.
+    collection_id: str | None = None
     year: int | None = None
     duration_ms: int | None = None
     # Apple artwork is only linked, never downloaded; artwork embedded in the file takes priority.

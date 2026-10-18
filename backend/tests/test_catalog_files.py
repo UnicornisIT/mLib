@@ -219,6 +219,7 @@ def test_linked_track_exposes_catalog_data_without_touching_tags(
 ) -> None:
     card = add_card(db, "7001", "Искала", "Земфира", isrc="RUA119900001", duration_ms=215000)
     card.apple_url = "https://music.apple.com/ru/album/x/1?i=7001"
+    card.collection_id = "1"
     card.artwork_url = "https://is1-ssl.mzstatic.com/image/thumb/Music/a/100x100bb.jpg"
     db.commit()
     path = make_wav(tmp_path / "rip.wav", title="track01", artist="Unknown artist")
@@ -238,6 +239,7 @@ def test_linked_track_exposes_catalog_data_without_touching_tags(
     )
     assert catalog["artwork_url"] == "https://is1-ssl.mzstatic.com/image/thumb/Music/a/600x600bb.jpg"
     assert catalog["apple_music_url"] == "https://music.apple.com/ru/album/x/1?i=7001"
+    assert catalog["collection_id"] == "1"
     assert (
         catalog["spotify_url"]
         == "https://open.spotify.com/search/%D0%97%D0%B5%D0%BC%D1%84%D0%B8%D1%80%D0%B0%20%D0%98%D1%81%D0%BA%D0%B0%D0%BB%D0%B0"
@@ -250,4 +252,5 @@ def test_linked_track_exposes_catalog_data_without_touching_tags(
     assert cards[card.id]["has_file"] is True and cards[card.id]["track_id"] == track_id
     assert cards[no_file.id]["has_file"] is False
     assert cards[no_file.id]["apple_music_url"] is None
+    assert cards[no_file.id]["collection_id"] is None
     assert cards[no_file.id]["spotify_url"].startswith("https://open.spotify.com/search/")

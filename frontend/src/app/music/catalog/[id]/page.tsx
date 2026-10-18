@@ -98,7 +98,7 @@ export default function CatalogTrackPage() {
           {[item.year, duration].filter(Boolean).map((value) => <span key={String(value)}>{value}</span>)}
           {!item.has_file && <span className="catalog-pill">Нет файла</span>}
         </p>
-        <div className="detail-actions">
+        <div className="catalog-actions">
           {file && <button className="button primary" type="button" onClick={() => player.playTrack(file, [file])}><Play size={17} fill="currentColor" />Слушать</button>}
           <ExternalLinks appleMusicUrl={item.apple_music_url} spotifyUrl={item.spotify_url} />
         </div>

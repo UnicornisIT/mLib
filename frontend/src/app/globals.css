@@ -287,6 +287,7 @@ a { color: inherit; text-decoration: none; }
 
 /* Music catalog: Apple Music-style cover grid, tinted headers and per-card file drops */
 .catalog-page { position: relative; isolation: isolate; min-width: 0; }
+.catalog-page .page-actions .button { white-space: nowrap; }
 .catalog-backdrop { position: absolute; inset: 0 0 auto; z-index: -1; height: 360px; pointer-events: none; background: linear-gradient(180deg, color-mix(in srgb, var(--catalog-tint, var(--accent)) 26%, transparent), transparent); transition: background .4s ease; }
 .catalog-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 26px; }
 .catalog-segmented { display: inline-flex; padding: 3px; border-radius: 11px; background: var(--surface-2); }
@@ -309,6 +310,7 @@ a { color: inherit; text-decoration: none; }
 .catalog-card.no-file .catalog-card-art .artwork, .catalog-card.no-file .catalog-card-art .artwork-placeholder { filter: grayscale(.55) brightness(.92); opacity: .72; }
 .catalog-card.no-file .album-title { color: var(--muted); }
 .catalog-card.dragging .catalog-card-art { outline-color: var(--accent); transform: scale(1.02); }
+.catalog-card.dragging .catalog-badge { opacity: 0; }
 .catalog-badge { position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px); overflow: hidden; padding: 4px 9px; border-radius: 999px; color: #fff; background: rgb(0 0 0 / 58%); backdrop-filter: blur(10px); font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
 .catalog-drop-overlay { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; padding: 12px; color: #fff; background: color-mix(in srgb, var(--accent) 78%, rgb(0 0 0 / 40%)); font-size: 12px; font-weight: 650; text-align: center; pointer-events: none; }
 .catalog-more { display: flex; justify-content: center; margin-top: 34px; }
@@ -326,7 +328,7 @@ a { color: inherit; text-decoration: none; }
 .catalog-hero-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 10px 0 0; color: var(--muted); font-size: 13px; }
 .catalog-hero-meta a { color: var(--text); font-weight: 600; }
 .catalog-hero-meta a:hover { text-decoration: underline; }
-.catalog-hero .detail-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.catalog-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
 .catalog-hero .transfer-note { margin-top: 14px; }
 .catalog-hero .button:not(.primary) { background: color-mix(in srgb, var(--surface) 72%, transparent); backdrop-filter: blur(8px); }
 
@@ -368,7 +370,7 @@ a { color: inherit; text-decoration: none; }
   .catalog-search { flex-basis: 100%; max-width: none; }
   .catalog-hero { grid-template-columns: 1fr; justify-items: center; padding: 22px 18px; text-align: center; }
   .catalog-hero-art { width: min(240px, 70vw); }
-  .catalog-hero-meta, .catalog-hero .detail-actions { justify-content: center; }
+  .catalog-hero-meta, .catalog-actions { justify-content: center; }
   .catalog-file, .catalog-dropzone { grid-template-columns: auto minmax(0, 1fr); }
   .catalog-file > .button, .catalog-dropzone > .button { grid-column: 1 / -1; justify-content: center; }
   .catalog-link-existing li { grid-template-columns: 40px minmax(0, 1fr); }

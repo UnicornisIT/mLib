@@ -199,8 +199,9 @@ export function TrackTable({
           <div className="modal" style={{ width: 460 }} role="dialog" aria-modal="true" aria-label="Связать с каталогом">
             <div className="modal-header"><h2>Связать с каталогом</h2><button className="icon-button" onClick={() => setCatalogTrack(null)} aria-label="Закрыть"><X size={18} /></button></div>
             <div className="modal-body">
-              <p style={{ marginTop: 0, color: "var(--muted)" }}>Треки каталога без файла, похожие на «{catalogTrack.title}». Теги файла не изменятся.</p>
               {candidates === null ? <div className="skeleton skeleton-row" /> : candidates.length ? (
+                <>
+                <p style={{ marginTop: 0, color: "var(--muted)" }}>Треки каталога без файла, похожие на «{catalogTrack.title}». Теги файла не изменятся.</p>
                 <div className="nav-group">
                   {candidates.map((candidate) => (
                     <button key={candidate.id} className="playlist-choice" onClick={() => void linkCatalog(candidate)}>
@@ -208,7 +209,8 @@ export function TrackTable({
                     </button>
                   ))}
                 </div>
-              ) : <p style={{ color: "var(--muted)" }}>Похожих треков без файла в каталоге нет. Откройте нужный трек в <Link href="/music/catalog" style={{ color: "var(--accent)" }}>каталоге</Link> и привяжите файл там.</p>}
+                </>
+              ) : <p style={{ marginTop: 0, color: "var(--muted)" }}>Похожих на «{catalogTrack.title}» треков без файла в каталоге нет. Откройте нужный трек в <Link href="/music/catalog" style={{ color: "var(--accent)" }}>каталоге</Link> и привяжите файл там.</p>}
             </div>
           </div>
         </div>

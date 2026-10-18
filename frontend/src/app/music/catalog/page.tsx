@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import {
   CATALOG_FILTERS,
   CatalogFilter,
+  catalogAlbumArtist,
   catalogAlbumHref,
   catalogAlbumKey,
   catalogArtworkSource,
@@ -21,6 +22,7 @@ import type { CatalogTrack, CatalogTrackPage } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 
 const PAGE_SIZE = 60;
+const ENRICH_POLL_MS = 4000;
 
 type View = "tracks" | "albums";
 type CatalogAlbum = { key: string; title: string; artist: string; year: number | null; tracks: CatalogTrack[]; withFile: number; cover: CatalogTrack };
@@ -38,6 +40,7 @@ function groupAlbums(items: CatalogTrack[]): CatalogAlbum[] {
     album.year ??= item.year;
     albums.set(key, album);
   }
+  for (const album of albums.values()) album.artist = catalogAlbumArtist(album.tracks.map((track) => track.artist_name));
   return [...albums.values()].sort((a, b) => a.artist.localeCompare(b.artist, "ru") || a.title.localeCompare(b.title, "ru"));
 }
 
@@ -137,6 +140,14 @@ export default function MusicCatalogPage() {
   }, [reload, reloadAlbums, view]);
   useLibraryChanged(refresh);
 
+  // Apple lookup runs in the background after an import: keep covers and links coming in.
+  const enriching = Boolean(items?.some((item) => item.enrich_status === "pending"));
+  useEffect(() => {
+    if (!enriching) return;
+    const timer = window.setInterval(refresh, ENRICH_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [enriching, refresh]);
+
   const loadMore = async () => {
     setLoadingMore(true);
     try {
@@ -170,7 +181,7 @@ export default function MusicCatalogPage() {
           <div>
             <div className="eyebrow">musicLib · Каталог</div>
             <h1>Каталог</h1>
-            <p>{items === null ? "Загружаем треки…" : `${trackCountText(pages.count)}${filter === "all" && !term ? " в каталоге" : " найдено"}. Обложки и ссылки — из Apple Music; файлы можно перетащить прямо на карточку.`}</p>
+            <p>{items === null ? "Загружаем треки…" : emptyLibrary ? "Здесь собираются треки из перенесённой фонотеки — с файлами и без." : `${trackCountText(pages.count)}${filter === "all" && !term ? " в каталоге" : " найдено"}. Обложки и ссылки — из Apple Music; файлы можно перетащить прямо на карточку.`}</p>
           </div>
           <div className="page-actions">
             <Link className="button" href="/music/transfer"><ArrowRightLeft size={16} />Перенести фонотеку</Link>
