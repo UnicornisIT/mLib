@@ -10,7 +10,7 @@ import { CatalogHero, ExternalLinks } from "@/components/CatalogHero";
 import { PageLoader } from "@/components/EmptyState";
 import { useLibraryChanged } from "@/hooks/useLibraryChanged";
 import { api } from "@/lib/api";
-import { AUDIO_ACCEPT, catalogAlbumHref, catalogArtworkSource, catalogDuration } from "@/lib/catalog";
+import { AUDIO_ACCEPT, catalogAlbumHref, catalogArtistHref, catalogArtworkSource, catalogDuration } from "@/lib/catalog";
 import { formatTime } from "@/lib/format";
 import type { CatalogFileResult, CatalogTrack, Track, TrackPage } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
@@ -92,7 +92,7 @@ export default function CatalogTrackPage() {
       <CatalogHero source={catalogArtworkSource(item, 64)} art={<Artwork id={item.artwork_id} url={item.artwork_url} alt={item.title} size={512} />}>
         <div className="eyebrow">Трек</div>
         <h1>{item.title}</h1>
-        <p className="catalog-hero-artist">{item.artist_name}</p>
+        <p className="catalog-hero-artist">{item.artist_key ? <Link href={catalogArtistHref(item.artist_key)}>{item.artist_name}</Link> : item.artist_name}</p>
         <p className="catalog-hero-meta">
           {item.album_title && (item.album_key ? <Link href={catalogAlbumHref(item.album_key)}>{item.album_title}</Link> : <span>{item.album_title}</span>)}
           {[item.year, duration].filter(Boolean).map((value) => <span key={String(value)}>{value}</span>)}

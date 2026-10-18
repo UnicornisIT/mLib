@@ -206,6 +206,12 @@ test.describe("release smoke", () => {
     // Albums of the export appear in the Albums section before any file is added.
     await page.goto("/music/albums");
     await expect(page.getByRole("article", { name: "Земфира — Земфира" }).getByText("Нет файлов")).toBeVisible();
+    // So do the artists; a catalog artist page lists the albums and tracks.
+    await page.goto("/music/artists");
+    await page.getByRole("link", { name: "Исполнитель Земфира" }).click();
+    await expect(page.getByRole("heading", { name: "Земфира", level: 1 })).toBeVisible();
+    await expect(page.getByRole("list", { name: "Список треков каталога" }).getByRole("listitem", { name: "Искала — Земфира" })).toBeVisible();
+    await expect(page.locator(".nav-item", { hasText: "Исполнители" })).toHaveClass(/active/);
 
     await page.goto("/music/catalog");
     await expect(page.getByRole("heading", { name: "Каталог", exact: true })).toBeVisible();

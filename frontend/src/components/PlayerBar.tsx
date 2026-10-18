@@ -20,7 +20,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Artwork } from "@/components/Artwork";
 import { api } from "@/lib/api";
-import { trackDisplay } from "@/lib/catalog";
+import { trackArtistHref, trackDisplay } from "@/lib/catalog";
 import { formatTime } from "@/lib/format";
 import type { Track } from "@/lib/types";
 import { usePlayer } from "@/providers/PlayerProvider";
@@ -70,7 +70,7 @@ export function PlayerBar() {
           <div className="now-copy">
             <div className="now-title">{current?.title ?? "Ничего не играет"}</div>
             {player.current ? (
-              <Link className="now-artist" href={`/music/artists/${player.current.artist.id}`}>{current?.artist}</Link>
+              <Link className="now-artist" href={trackArtistHref(player.current)}>{current?.artist}</Link>
             ) : <div className="now-artist">Выберите композицию</div>}
           </div>
           {player.current && (

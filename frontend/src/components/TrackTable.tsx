@@ -20,7 +20,7 @@ import { useState } from "react";
 import { Artwork } from "@/components/Artwork";
 import { GenreCombobox } from "@/components/GenreCombobox";
 import { api } from "@/lib/api";
-import { catalogHref, trackDisplay } from "@/lib/catalog";
+import { catalogHref, trackArtistHref, trackDisplay } from "@/lib/catalog";
 import { formatDate, formatTime } from "@/lib/format";
 import { metadataIssueText } from "@/lib/metadata-quality";
 import type { CatalogTrack, Playlist, Track } from "@/lib/types";
@@ -151,7 +151,7 @@ export function TrackTable({
                     )}
                     <button className="track-title" style={{ border: 0, padding: 0, background: "none", cursor: "pointer" }} onDoubleClick={() => player.playTrack(track, displayTracks)}>{shown.title}</button>
                   </div>
-                  <Link className="track-subtitle" href={`/music/artists/${track.artist.id}`}>{shown.artist}</Link>
+                  <Link className="track-subtitle" href={trackArtistHref(track)}>{shown.artist}</Link>
                 </div>
               </div>
               <div className="track-col-album truncate">

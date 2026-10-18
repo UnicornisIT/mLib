@@ -34,7 +34,9 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useAuth();
-  const isActive = (href: string) => href === "/music" ? pathname === "/music" : pathname.startsWith(href);
+  // Catalog artist and album pages belong to the Artists and Albums sections.
+  const section = pathname.startsWith("/music/catalog/artist") ? "/music/artists" : pathname.startsWith("/music/catalog/album") ? "/music/albums" : pathname;
+  const isActive = (href: string) => href === "/music" ? section === "/music" : section.startsWith(href);
   return (
     <>
       {open && <button className="sidebar-scrim" onClick={onClose} aria-label="Закрыть меню" />}

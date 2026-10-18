@@ -12,7 +12,9 @@ from app.modules.music.library import (
     DuplicateTrackError,
     catalog_album_groups,
     catalog_album_key,
+    catalog_artist_key,
     group_catalog_albums,
+    group_catalog_artists,
     import_staged_file,
     pagination,
     serialize_catalog_track,
@@ -24,6 +26,8 @@ from app.modules.music.models import CatalogTrack, Track
 from app.modules.music.schemas import (
     CatalogAlbumDetail,
     CatalogAlbumRead,
+    CatalogArtistDetail,
+    CatalogArtistRead,
     CatalogFileLink,
     CatalogFileResult,
     CatalogTrackPage,
@@ -137,7 +141,69 @@ def list_catalog_albums(
         .where(CatalogTrack.album_title.is_not(None), *catalog_filters(q, file_status))
         .options(selectinload(CatalogTrack.track))
     ).all()
-    return group_catalog_albums(items)
+    return covering_albums(db, group_catalog_albums(items))
+
+
+def fully_linked(db: Session, column, ids: set[str]) -> set[str]:
+    """Library albums or artists whose every file is linked to the catalog; the rest stay listed on their own."""
+    if not ids:
+        return set()
+    rows = db.execute(
+        select(column, func.count(Track.id), func.count(Track.catalog_track_id)).where(column.in_(ids)).group_by(column)
+    ).all()
+    return {value for value, total, linked in rows if total == linked}
+
+
+def covering_albums(db: Session, albums: list[CatalogAlbumRead]) -> list[CatalogAlbumRead]:
+    covered = fully_linked(db, Track.album_id, {value for album in albums for value in album.local_album_ids})
+    for album in albums:
+        album.local_album_ids = [value for value in album.local_album_ids if value in covered]
+    return albums
+
+
+@router.get("/artists", response_model=list[CatalogArtistRead])
+def list_catalog_artists(
+    _: CurrentUser,
+    db: Annotated[Session, Depends(get_db)],
+    q: str | None = None,
+    file_status: Annotated[CatalogStatus, Query(alias="status")] = "all",
+) -> list[CatalogArtistRead]:
+    """Artists of the catalog, so a transferred library has artists before any file is added."""
+    items = db.scalars(
+        select(CatalogTrack).where(*catalog_filters(q, file_status)).options(selectinload(CatalogTrack.track))
+    ).all()
+    artists = group_catalog_artists(items)
+    covered = fully_linked(db, Track.artist_id, {value for artist in artists for value in artist.local_artist_ids})
+    for artist in artists:
+        artist.local_artist_ids = [value for value in artist.local_artist_ids if value in covered]
+    return artists
+
+
+@router.get("/artist", response_model=CatalogArtistDetail)
+def get_catalog_artist(key: str, _: CurrentUser, db: Annotated[Session, Depends(get_db)]) -> CatalogArtistDetail:
+    """A catalog artist with their tracks and the albums those tracks belong to."""
+    items = db.scalars(
+        select(CatalogTrack)
+        .options(selectinload(CatalogTrack.track))
+        .order_by(func.lower(CatalogTrack.title), CatalogTrack.id)
+    ).all()
+    tracks = [item for item in items if catalog_artist_key(item) == key]
+    if not tracks:
+        raise HTTPException(status_code=404, detail="Исполнитель не найден в каталоге")
+    [artist] = group_catalog_artists(tracks)
+    own = {item.id for item in tracks}
+    groups = catalog_album_groups([item for item in items if item.album_title])
+    albums = [
+        album
+        for _, _, members in groups
+        if any(item.id in own for item in members)
+        for album in group_catalog_albums(members)
+    ]
+    return CatalogArtistDetail(
+        **artist.model_dump(),
+        albums=covering_albums(db, albums),
+        tracks=[serialize_catalog_track(item) for item in tracks],
+    )
 
 
 @router.get("/album", response_model=CatalogAlbumDetail)
@@ -154,7 +220,7 @@ def get_catalog_album(key: str, _: CurrentUser, db: Annotated[Session, Depends(g
     items = next((members for _, keys, members in catalog_album_groups(same_title) if key in keys), None)
     if not items:
         raise HTTPException(status_code=404, detail="Альбом не найден в каталоге")
-    [album] = group_catalog_albums(items)
+    [album] = covering_albums(db, group_catalog_albums(items))
     return CatalogAlbumDetail(**album.model_dump(), tracks=[serialize_catalog_track(item) for item in items])
 
 

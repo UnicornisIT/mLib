@@ -329,3 +329,41 @@ def test_catalog_albums_group_by_album_title_and_lead_artist(
     smash = authenticated_client.get(f"/api/music/transfer/tracks/{shrek[1].id}").json()["album_key"]
     soundtrack = authenticated_client.get("/api/music/transfer/album", params={"key": smash}).json()
     assert [track["artist_name"] for track in soundtrack["tracks"]] == ["Eels", "Smash Mouth"]
+
+
+def test_catalog_artists_group_by_lead_artist_and_cover_fully_linked_files(
+    authenticated_client: TestClient, db: Session, tmp_path: Path
+) -> None:
+    lucky = add_card(db, "617154366", "Get Lucky", "Daft Punk, Pharrell Williams & Nile Rodgers")
+    crush = add_card(db, "617154362", "Instant Crush", "Daft Punk & Julian Casablancas")
+    add_card(db, "9001", "Искала", "Земфира")
+    for card in (lucky, crush):
+        card.album_title = "Random Access Memories"
+    db.commit()
+    path = make_wav(tmp_path / "lucky.wav", title="Get Lucky", artist="Daft Punk", album="RAM")
+    linked = authenticated_client.post(
+        f"/api/music/transfer/tracks/{lucky.id}/file", files={"file": (path.name, path.read_bytes(), "audio/wav")}
+    ).json()["track"]
+
+    artists = authenticated_client.get("/api/music/transfer/artists").json()
+    assert [
+        (artist["name"], artist["track_count"], artist["album_count"], artist["with_file"]) for artist in artists
+    ] == [
+        ("Daft Punk", 2, 1, 1),
+        ("Земфира", 1, 1, 0),
+    ]
+    assert artists[0]["local_artist_ids"] == [linked["artist"]["id"]]
+    track = authenticated_client.get(f"/api/music/transfer/tracks/{crush.id}").json()
+    assert track["artist_key"] == artists[0]["key"] == "daft punk"
+
+    detail = authenticated_client.get("/api/music/transfer/artist", params={"key": "daft punk"}).json()
+    assert [item["title"] for item in detail["tracks"]] == ["Get Lucky", "Instant Crush"]
+    assert [(album["title"], album["artist_key"]) for album in detail["albums"]] == [
+        ("Random Access Memories", "daft punk")
+    ]
+    assert authenticated_client.get("/api/music/transfer/artist", params={"key": "nobody"}).status_code == 404
+
+    # A library artist with a file outside the catalog keeps its own card.
+    upload_files(authenticated_client, make_wav(tmp_path / "other.wav", title="Other Song", artist="Daft Punk"))
+    artists = authenticated_client.get("/api/music/transfer/artists").json()
+    assert artists[0]["local_artist_ids"] == []

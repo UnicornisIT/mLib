@@ -4,11 +4,11 @@ import { CSSProperties, ReactNode } from "react";
 import { useArtworkColor } from "@/lib/catalog";
 
 /** Apple Music-style header: the background fades from the cover's dominant colour into the page. */
-export function CatalogHero({ source, art, children }: { source: string | null; art: ReactNode; children: ReactNode }) {
+export function CatalogHero({ source, art, round = false, children }: { source: string | null; art: ReactNode; round?: boolean; children: ReactNode }) {
   const color = useArtworkColor(source);
   const style = color ? { "--catalog-tint": color } as CSSProperties : undefined;
   return (
-    <header className={`catalog-hero ${color ? "tinted" : ""}`} style={style}>
+    <header className={`catalog-hero ${color ? "tinted" : ""} ${round ? "round" : ""}`} style={style}>
       <div className="catalog-hero-art">{art}</div>
       <div className="catalog-hero-copy">{children}</div>
     </header>

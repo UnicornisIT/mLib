@@ -10,7 +10,7 @@ import { CatalogHero, ExternalLinks } from "@/components/CatalogHero";
 import { EmptyState, PageLoader } from "@/components/EmptyState";
 import { useLibraryChanged } from "@/hooks/useLibraryChanged";
 import { api } from "@/lib/api";
-import { catalogArtworkSource, catalogDuration, catalogHref } from "@/lib/catalog";
+import { catalogArtistHref, catalogArtworkSource, catalogDuration, catalogHref } from "@/lib/catalog";
 import type { CatalogAlbumDetail, CatalogTrack, Track } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { usePlayer } from "@/providers/PlayerProvider";
@@ -63,7 +63,7 @@ function CatalogAlbum() {
       <CatalogHero source={catalogArtworkSource(album, 64)} art={<Artwork id={album.artwork_id} url={album.artwork_url} alt={title} size={512} />}>
         <div className="eyebrow">Альбом</div>
         <h1>{title}</h1>
-        <p className="catalog-hero-artist">{album.artist_name}</p>
+        <p className="catalog-hero-artist">{album.artist_key ? <Link href={catalogArtistHref(album.artist_key)}>{album.artist_name}</Link> : album.artist_name}</p>
         <p className="catalog-hero-meta">
           {year && <span>{year}</span>}
           <span>{items.length} в каталоге</span>

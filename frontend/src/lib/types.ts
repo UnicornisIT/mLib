@@ -120,6 +120,7 @@ export type CatalogTrackBrief = {
   album_title: string | null;
   collection_id: string | null;
   album_key: string | null;
+  artist_key: string | null;
   year: number | null;
   duration_ms: number | null;
   artwork_url: string | null;
@@ -137,6 +138,7 @@ export type CatalogAlbum = {
   key: string;
   title: string;
   artist_name: string;
+  artist_key: string | null;
   year: number | null;
   artwork_url: string | null;
   artwork_id: string | null;
@@ -145,6 +147,17 @@ export type CatalogAlbum = {
   with_file: number;
   local_album_ids: string[];
 };
+export type CatalogArtist = {
+  key: string;
+  name: string;
+  artwork_url: string | null;
+  artwork_id: string | null;
+  album_count: number;
+  track_count: number;
+  with_file: number;
+  local_artist_ids: string[];
+};
+export type CatalogArtistDetail = CatalogArtist & { albums: CatalogAlbum[]; tracks: CatalogTrack[] };
 export type CatalogAlbumDetail = CatalogAlbum & { tracks: CatalogTrack[] };
 export type CatalogTrackPage = { items: CatalogTrack[]; page: number; page_size: number; total: number; pages: number };
 export type CatalogFileResult = { status: "added" | "linked_existing"; detail: string; catalog_track: CatalogTrack; track: Track };

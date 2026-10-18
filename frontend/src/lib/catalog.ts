@@ -36,6 +36,15 @@ export function catalogAlbumHref(key: string) {
   return `/music/catalog/album?${new URLSearchParams({ key })}`;
 }
 
+export function catalogArtistHref(key: string) {
+  return `/music/catalog/artist?${new URLSearchParams({ key })}`;
+}
+
+/** Artist link of a track: the catalog artist for a linked file, otherwise the library artist from its tags. */
+export function trackArtistHref(track: Track) {
+  return track.catalog?.artist_key ? catalogArtistHref(track.catalog.artist_key) : `/music/artists/${track.artist.id}`;
+}
+
 export function catalogDuration(durationMs: number | null) {
   if (!durationMs) return null;
   const seconds = Math.round(durationMs / 1000);

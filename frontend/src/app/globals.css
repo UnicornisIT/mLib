@@ -347,8 +347,11 @@ a.stat-card.stat-link:hover .stat-link-hint { color: var(--accent); }
 .catalog-hero.tinted::before { opacity: 1; }
 .catalog-hero-art { aspect-ratio: 1; overflow: hidden; border-radius: 14px; background: var(--surface); box-shadow: 0 22px 50px rgb(0 0 0 / 28%); }
 .catalog-hero-copy { min-width: 0; }
+.catalog-hero.round .catalog-hero-art { border-radius: 50%; }
+.artist-card.no-file .artist-art { opacity: .8; }
 .catalog-hero-copy h1 { margin: 0; overflow-wrap: anywhere; font-size: clamp(28px, 4.2vw, 50px); line-height: 1.04; letter-spacing: -.05em; font-weight: 780; }
 .catalog-hero-artist { margin: 8px 0 0; color: var(--accent); font-size: 19px; font-weight: 650; }
+.catalog-hero-artist a:hover { text-decoration: underline; }
 .catalog-hero-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 10px 0 0; color: var(--muted); font-size: 13px; }
 .catalog-hero-meta a { color: var(--text); font-weight: 600; }
 .catalog-hero-meta a:hover { text-decoration: underline; }
