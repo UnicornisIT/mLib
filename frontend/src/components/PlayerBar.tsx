@@ -20,6 +20,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Artwork } from "@/components/Artwork";
 import { api } from "@/lib/api";
+import { trackDisplay } from "@/lib/catalog";
 import { formatTime } from "@/lib/format";
 import type { Track } from "@/lib/types";
 import { usePlayer } from "@/providers/PlayerProvider";
@@ -27,6 +28,7 @@ import { usePlayer } from "@/providers/PlayerProvider";
 export function PlayerBar() {
   const player = usePlayer();
   const [queueOpen, setQueueOpen] = useState(false);
+  const current = player.current ? trackDisplay(player.current) : null;
   const favorite = async () => {
     if (!player.current) return;
     const updated = await api<Track>(`/music/tracks/${player.current.id}/favorite`, {
@@ -46,29 +48,29 @@ export function PlayerBar() {
             </div>
           </div>
           <div className="queue-list">
-            {player.queue.map((track, index) => (
+            {player.queue.map((track, index) => { const shown = trackDisplay(track); return (
               <div className={`queue-item ${index === player.currentIndex ? "current" : ""}`} key={`${track.id}-${index}`}>
-                <button className="queue-item-art" onClick={() => player.playTrack(track, player.queue)} aria-label={`Воспроизвести ${track.title}`}>
-                  <Artwork id={track.artwork_id} alt={track.title} size={64} />
+                <button className="queue-item-art" onClick={() => player.playTrack(track, player.queue)} aria-label={`Воспроизвести ${shown.title}`}>
+                  <Artwork id={track.artwork_id} url={shown.artworkUrl} alt={shown.title} size={64} />
                 </button>
                 <button className="action-item" style={{ display: "block" }} onClick={() => player.playTrack(track, player.queue)}>
-                  <span className="track-title">{track.title}</span>
-                  <span className="track-subtitle">{track.artist.name}</span>
+                  <span className="track-title">{shown.title}</span>
+                  <span className="track-subtitle">{shown.artist}</span>
                 </button>
                 <button className="icon-button small" onClick={() => player.removeFromQueue(index)} aria-label="Удалить из очереди"><X size={15} /></button>
               </div>
-            ))}
+            ); })}
             {!player.queue.length && <div className="empty-state" style={{ minHeight: 180 }}><div><p>Очередь пуста</p></div></div>}
           </div>
         </div>
       )}
       <footer className="player" aria-label="Музыкальный плеер">
         <div className="now-playing">
-          <div className="now-art"><Artwork id={player.current?.artwork_id} alt={player.current?.title ?? "Нет трека"} size={64} /></div>
+          <div className="now-art"><Artwork id={player.current?.artwork_id} url={current?.artworkUrl} alt={current?.title ?? "Нет трека"} size={64} /></div>
           <div className="now-copy">
-            <div className="now-title">{player.current?.title ?? "Ничего не играет"}</div>
+            <div className="now-title">{current?.title ?? "Ничего не играет"}</div>
             {player.current ? (
-              <Link className="now-artist" href={`/music/artists/${player.current.artist.id}`}>{player.current.artist.name}</Link>
+              <Link className="now-artist" href={`/music/artists/${player.current.artist.id}`}>{current?.artist}</Link>
             ) : <div className="now-artist">Выберите композицию</div>}
           </div>
           {player.current && (

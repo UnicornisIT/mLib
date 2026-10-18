@@ -107,6 +107,7 @@ def serialize_catalog_track(item: CatalogTrack) -> CatalogTrackRead:
         enrich_status=item.enrich_status,
         has_file=track is not None,
         track_id=track.id if track else None,
+        artwork_id=track.artwork_id if track else None,
     )
 
 

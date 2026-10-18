@@ -128,7 +128,11 @@ export type CatalogTrack = CatalogTrackBrief & {
   enrich_status: "pending" | "enriched" | "not_found" | "error";
   has_file: boolean;
   track_id: string | null;
+  /** Artwork embedded in the linked file; wins over artwork_url. */
+  artwork_id: string | null;
 };
+export type CatalogTrackPage = { items: CatalogTrack[]; page: number; page_size: number; total: number; pages: number };
+export type CatalogFileResult = { status: "added" | "linked_existing"; detail: string; catalog_track: CatalogTrack; track: Track };
 export type TransferJob = {
   id: string;
   source: string;

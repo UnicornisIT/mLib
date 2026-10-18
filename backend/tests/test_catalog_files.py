@@ -85,6 +85,7 @@ def test_upload_into_catalog_track_ignores_differing_tags(
     body = response.json()
     assert body["status"] == "added"
     assert body["catalog_track"]["has_file"] is True
+    assert body["catalog_track"]["artwork_id"] == body["track"]["artwork_id"]
     assert body["track"]["title"] == "Track 01"
     stored = db.get(Track, body["track"]["id"])
     assert stored.catalog_track_id == card.id

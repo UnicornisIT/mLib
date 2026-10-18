@@ -44,6 +44,8 @@ class CatalogTrackRead(CatalogTrackBrief):
     enrich_status: Literal["pending", "enriched", "not_found", "error"]
     has_file: bool
     track_id: str | None = None
+    # Artwork embedded in the linked file; shown instead of artwork_url when present.
+    artwork_id: str | None = None
 
 
 class TrackRead(BaseModel):

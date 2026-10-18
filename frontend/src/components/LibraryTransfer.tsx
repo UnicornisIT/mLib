@@ -1,6 +1,7 @@
 "use client";
 
-import { FileSpreadsheet, RotateCcw, UploadCloud, X } from "lucide-react";
+import { FileSpreadsheet, GalleryVerticalEnd, RotateCcw, UploadCloud, X } from "lucide-react";
+import Link from "next/link";
 import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { TransferJob, TransferSummary } from "@/lib/types";
@@ -123,6 +124,11 @@ export function LibraryTransfer() {
           <h1>Перенести фонотеку</h1>
           <p>Загрузите экспорт Apple Music в CSV — mLib соберёт каталог треков с названиями, альбомами и обложками. Файлы можно добавить позже, каждый в свою карточку.</p>
         </div>
+        {summary && summary.total > 0 && (
+          <div className="page-actions">
+            <Link className="button" href="/music/catalog"><GalleryVerticalEnd size={16} />Открыть каталог</Link>
+          </div>
+        )}
       </div>
 
       {summary && summary.total > 0 && (

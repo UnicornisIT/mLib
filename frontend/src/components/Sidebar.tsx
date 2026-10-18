@@ -5,6 +5,7 @@ import {
   CircleUserRound,
   Compass,
   Disc3,
+  GalleryVerticalEnd,
   Heart,
   LibraryBig,
   ListMusic,
@@ -20,6 +21,7 @@ import { useAuth } from "@/providers/AuthProvider";
 
 const links = [
   { href: "/music", label: "Главная", icon: Compass },
+  { href: "/music/catalog", label: "Каталог", icon: GalleryVerticalEnd },
   { href: "/music/tracks", label: "Все треки", icon: LibraryBig },
   { href: "/music/albums", label: "Альбомы", icon: Album },
   { href: "/music/artists", label: "Исполнители", icon: UsersRound },

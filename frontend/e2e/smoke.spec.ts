@@ -5,13 +5,13 @@ import { deflateSync } from "node:zlib";
 const username = "release-user";
 const password = "correct horse battery staple";
 
-function taggedWav() {
+function taggedWav(tone = 440) {
   const sampleRate = 8_000;
   const seconds = 3;
   const samples = sampleRate * seconds;
   const pcm = Buffer.alloc(samples * 2);
   for (let index = 0; index < samples; index += 1) {
-    const sample = Math.round(Math.sin((2 * Math.PI * 440 * index) / sampleRate) * 5_000);
+    const sample = Math.round(Math.sin((2 * Math.PI * tone * index) / sampleRate) * 5_000);
     pcm.writeInt16LE(sample, index * 2);
   }
   const chunk = (id: string, data: Buffer) => {
@@ -191,6 +191,46 @@ test.describe("release smoke", () => {
     await page.getByRole("button", { name: /Дорога/ }).click();
     await expect(page.getByRole("main").getByText("Искала")).toBeVisible();
     await expect(page.getByRole("main").getByText(/нет файла/).first()).toBeVisible();
+
+    await page.goto("/music/catalog");
+    await expect(page.getByRole("heading", { name: "Каталог", exact: true })).toBeVisible();
+    const grid = page.getByLabel("Треки каталога");
+    await expect(grid.getByRole("article")).toHaveCount(2);
+    await expect(grid.getByRole("article", { name: "Искала — Земфира" }).getByText("Нет файла")).toBeVisible();
+    await page.getByRole("button", { name: "С файлом", exact: true }).click();
+    await expect(page.getByText("Ничего не найдено")).toBeVisible();
+    await page.getByRole("button", { name: "Все", exact: true }).click();
+    await page.getByRole("tab", { name: "Альбомы" }).click();
+    await expect(page.getByLabel("Альбомы каталога").getByRole("link", { name: "Альбом Земфира" })).toBeVisible();
+    await page.getByRole("tab", { name: "Треки" }).click();
+
+    // Drag-and-drop straight into a card that has no file.
+    const card = grid.getByRole("article", { name: "Hello, World — Тестовый артист" });
+    const dropped = await page.evaluateHandle((bytes) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([new Uint8Array(bytes)], "hello.wav", { type: "audio/wav" }));
+      return transfer;
+    }, [...taggedWav(523)]);
+    await card.dispatchEvent("dragenter", { dataTransfer: dropped });
+    await expect(card.getByText("Отпустите, чтобы добавить файл")).toBeVisible();
+    await card.dispatchEvent("drop", { dataTransfer: dropped });
+    await expect(page.getByText("Файл добавлен в «Hello, World»")).toBeVisible({ timeout: 30_000 });
+    await expect(card.getByText("Нет файла")).toBeHidden();
+    await expect(card.getByRole("button", { name: "Воспроизвести Hello, World" })).toBeVisible();
+
+    // Upload by button on the catalog track page; catalog data replaces the file's tags on screen.
+    await grid.getByRole("link", { name: "Искала", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Искала" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Найти в Spotify" })).toHaveAttribute("href", /open\.spotify\.com\/search/);
+    await page.getByLabel("Аудиофайл для трека").setInputFiles({ name: "rip.wav", mimeType: "audio/wav", buffer: taggedWav(660) });
+    await expect(page.getByRole("region", { name: "Файл" }).getByText("Файл в медиатеке")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Теги файла: Release Track — Test Artist/)).toBeVisible();
+    await page.getByRole("button", { name: "Слушать" }).click();
+    await expect(page.getByRole("contentinfo", { name: "Музыкальный плеер" }).getByText("Искала")).toBeVisible();
+    await page.getByRole("contentinfo", { name: "Музыкальный плеер" }).getByRole("button", { name: "Пауза" }).click();
+
+    await page.goto("/music/tracks");
+    await expect(page.getByRole("main").getByRole("button", { name: "Искала", exact: true })).toBeVisible();
   });
 
   test("mobile setup screen has no horizontal overflow", async ({ page }, testInfo) => {
@@ -217,7 +257,7 @@ test.describe("release smoke", () => {
       { width: 375, height: 812 },
       { width: 360, height: 800 },
     ];
-    const releaseRoutes = ["/", "/music", "/movie", "/books", "/collections", "/games", "/wishes"];
+    const releaseRoutes = ["/", "/music", "/music/catalog", "/movie", "/books", "/collections", "/games", "/wishes"];
     const allowedOverflowPixels = 1;
 
     for (const viewport of viewports) {
