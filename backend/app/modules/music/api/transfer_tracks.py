@@ -10,6 +10,7 @@ from app.core.config import Settings, get_settings
 from app.database.session import get_music_db as get_db
 from app.modules.music.library import (
     DuplicateTrackError,
+    group_catalog_albums,
     import_staged_file,
     pagination,
     serialize_catalog_track,
@@ -18,7 +19,13 @@ from app.modules.music.library import (
 )
 from app.modules.music.metadata import normalize_identity
 from app.modules.music.models import CatalogTrack, Track
-from app.modules.music.schemas import CatalogFileLink, CatalogFileResult, CatalogTrackPage, CatalogTrackRead
+from app.modules.music.schemas import (
+    CatalogAlbumRead,
+    CatalogFileLink,
+    CatalogFileResult,
+    CatalogTrackPage,
+    CatalogTrackRead,
+)
 from app.modules.music.transfer.matching import match_for_track
 from app.storage.service import LocalMediaStorage
 
@@ -57,17 +64,10 @@ def has_file_filter():
     return select(Track.id).where(Track.catalog_track_id == CatalogTrack.id).correlate(CatalogTrack).exists()
 
 
-@router.get("/tracks", response_model=CatalogTrackPage)
-def list_catalog_tracks(
-    _: CurrentUser,
-    db: Annotated[Session, Depends(get_db)],
-    page: int = 1,
-    page_size: int = 50,
-    q: str | None = None,
-    file_status: Annotated[Literal["all", "with_file", "without_file", "enriched", "not_found"], Query(alias="status")] = "all",
-) -> CatalogTrackPage:
-    page = max(1, page)
-    page_size = min(200, max(1, page_size))
+CatalogStatus = Literal["all", "with_file", "without_file", "enriched", "not_found"]
+
+
+def catalog_filters(q: str | None, file_status: CatalogStatus) -> list:
     filters = []
     if q and q.strip():
         # Normalized columns are already casefolded: SQLite LIKE ignores case only for ASCII.
@@ -87,6 +87,21 @@ def list_catalog_tracks(
         filters.append(CatalogTrack.enrich_status == "enriched")
     elif file_status == "not_found":
         filters.append(CatalogTrack.enrich_status.in_(("not_found", "error")))
+    return filters
+
+
+@router.get("/tracks", response_model=CatalogTrackPage)
+def list_catalog_tracks(
+    _: CurrentUser,
+    db: Annotated[Session, Depends(get_db)],
+    page: int = 1,
+    page_size: int = 50,
+    q: str | None = None,
+    file_status: Annotated[CatalogStatus, Query(alias="status")] = "all",
+) -> CatalogTrackPage:
+    page = max(1, page)
+    page_size = min(200, max(1, page_size))
+    filters = catalog_filters(q, file_status)
     total = int(db.scalar(select(func.count(CatalogTrack.id)).where(*filters)) or 0)
     offset, limit, pages = pagination(total, page, page_size)
     items = db.scalars(
@@ -104,6 +119,22 @@ def list_catalog_tracks(
         total=total,
         pages=pages,
     )
+
+
+@router.get("/albums", response_model=list[CatalogAlbumRead])
+def list_catalog_albums(
+    _: CurrentUser,
+    db: Annotated[Session, Depends(get_db)],
+    q: str | None = None,
+    file_status: Annotated[CatalogStatus, Query(alias="status")] = "all",
+) -> list[CatalogAlbumRead]:
+    """Albums of the catalog, so a transferred library has albums before any file is added."""
+    items = db.scalars(
+        select(CatalogTrack)
+        .where(CatalogTrack.album_title.is_not(None), *catalog_filters(q, file_status))
+        .options(selectinload(CatalogTrack.track))
+    ).all()
+    return group_catalog_albums(items)
 
 
 @router.get("/tracks/{catalog_track_id}", response_model=CatalogTrackRead)

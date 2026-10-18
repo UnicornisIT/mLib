@@ -203,6 +203,10 @@ test.describe("release smoke", () => {
     await expect(page.getByRole("main").getByText("Искала")).toBeVisible();
     await expect(page.getByRole("main").getByText(/нет файла/).first()).toBeVisible();
 
+    // Albums of the export appear in the Albums section before any file is added.
+    await page.goto("/music/albums");
+    await expect(page.getByRole("article", { name: "Земфира — Земфира" }).getByText("Нет файлов")).toBeVisible();
+
     await page.goto("/music/catalog");
     await expect(page.getByRole("heading", { name: "Каталог", exact: true })).toBeVisible();
     const grid = page.getByLabel("Треки каталога");

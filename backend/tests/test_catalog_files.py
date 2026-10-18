@@ -3,7 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
-from mutagen.id3 import TIT2, TPE1, TSRC
+from mutagen.id3 import TALB, TIT2, TPE1, TSRC
 from mutagen.mp4 import MP4FreeForm
 from mutagen.wave import WAVE
 from sqlalchemy.orm import Session
@@ -16,7 +16,9 @@ from app.modules.music.scanner import jobs, scan_directory
 _counter = iter(range(1, 10_000))
 
 
-def make_wav(path: Path, *, title: str, artist: str, isrc: str | None = None, seconds: float = 2.0) -> Path:
+def make_wav(
+    path: Path, *, title: str, artist: str, isrc: str | None = None, album: str | None = None, seconds: float = 2.0
+) -> Path:
     frames = int(8000 * seconds)
     salt = next(_counter)
     with wave.open(str(path), "wb") as output:
@@ -30,6 +32,8 @@ def make_wav(path: Path, *, title: str, artist: str, isrc: str | None = None, se
     audio.tags.add(TPE1(encoding=3, text=[artist]))
     if isrc:
         audio.tags.add(TSRC(encoding=3, text=[isrc]))
+    if album:
+        audio.tags.add(TALB(encoding=3, text=[album]))
     audio.save()
     return path
 
@@ -263,3 +267,40 @@ def test_linked_track_exposes_catalog_data_without_touching_tags(
     assert cards[no_file.id]["apple_music_url"] is None
     assert cards[no_file.id]["collection_id"] is None
     assert cards[no_file.id]["spotify_url"].startswith("https://open.spotify.com/search/")
+
+
+def test_catalog_albums_group_by_apple_album_and_cover_linked_files(
+    authenticated_client: TestClient, db: Session, tmp_path: Path
+) -> None:
+    lucky = add_card(db, "617154366", "Get Lucky", "Daft Punk, Pharrell Williams & Nile Rodgers")
+    crush = add_card(db, "617154362", "Instant Crush", "Daft Punk & Julian Casablancas")
+    add_card(db, "9001", "Искала", "Земфира")
+    for card in (lucky, crush):
+        card.album_title = "Random Access Memories"
+        card.collection_id = "617154241"
+        card.year = 2013
+        card.apple_url = f"https://music.apple.com/ru/album/ram/617154241?i={card.apple_track_id}"
+    db.commit()
+    path = make_wav(tmp_path / "lucky.wav", title="Get Lucky", artist="Daft Punk", album="RAM")
+    linked = authenticated_client.post(
+        f"/api/music/transfer/tracks/{lucky.id}/file", files={"file": (path.name, path.read_bytes(), "audio/wav")}
+    ).json()["track"]
+
+    albums = authenticated_client.get("/api/music/transfer/albums").json()
+    assert [(album["title"], album["artist_name"]) for album in albums] == [
+        ("Random Access Memories", "Daft Punk"),
+        ("Искала - Single", "Земфира"),
+    ]
+    ram = albums[0]
+    assert (ram["key"], ram["track_count"], ram["with_file"], ram["year"]) == ("apple:617154241", 2, 1, 2013)
+    assert ram["apple_music_url"] == "https://music.apple.com/ru/album/ram/617154241"
+    assert ram["local_album_ids"] == [linked["album"]["id"]]
+    assert albums[1]["key"].startswith("земфира|") and albums[1]["collection_id"] is None
+
+    without = authenticated_client.get("/api/music/transfer/albums", params={"status": "without_file"}).json()
+    assert [(album["title"], album["track_count"]) for album in without] == [
+        ("Random Access Memories", 1),
+        ("Искала - Single", 1),
+    ]
+    searched = authenticated_client.get("/api/music/transfer/albums", params={"q": "иск"}).json()
+    assert [album["key"] for album in searched] == [albums[1]["key"]]

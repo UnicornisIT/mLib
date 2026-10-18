@@ -339,6 +339,26 @@ class CatalogTrackPage(BaseModel):
     pages: int
 
 
+class CatalogAlbumRead(BaseModel):
+    """Catalog tracks grouped into an album by Apple's album id, or by artist and album title."""
+
+    key: str
+    collection_id: str | None = None
+    title: str
+    # Lead artist shared by the tracks: "Daft Punk & X" and "Daft Punk, Y" give "Daft Punk".
+    artist_name: str
+    # Artist of one track as exported; finds albums without an Apple album id.
+    track_artist_name: str
+    year: int | None = None
+    artwork_url: str | None = None
+    artwork_id: str | None = None
+    apple_music_url: str | None = None
+    track_count: int
+    with_file: int
+    # Library albums built from the tags of linked files; the catalog album stands in for them.
+    local_album_ids: list[str] = []
+
+
 class CatalogFileLink(BaseModel):
     track_id: str
 

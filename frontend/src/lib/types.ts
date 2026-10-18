@@ -132,6 +132,20 @@ export type CatalogTrack = CatalogTrackBrief & {
   /** Artwork embedded in the linked file; wins over artwork_url. */
   artwork_id: string | null;
 };
+export type CatalogAlbum = {
+  key: string;
+  collection_id: string | null;
+  title: string;
+  artist_name: string;
+  track_artist_name: string;
+  year: number | null;
+  artwork_url: string | null;
+  artwork_id: string | null;
+  apple_music_url: string | null;
+  track_count: number;
+  with_file: number;
+  local_album_ids: string[];
+};
 export type CatalogTrackPage = { items: CatalogTrack[]; page: number; page_size: number; total: number; pages: number };
 export type CatalogFileResult = { status: "added" | "linked_existing"; detail: string; catalog_track: CatalogTrack; track: Track };
 export type TransferJob = {

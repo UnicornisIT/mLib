@@ -1,6 +1,8 @@
 import logging
 import math
+import os
 import uuid
+from collections.abc import Sequence
 from pathlib import Path
 
 from sqlalchemy import select
@@ -12,7 +14,14 @@ from app.modules.music.artwork import save_artwork
 from app.modules.music.metadata import NormalizedTrackMetadata, extract_metadata, normalize_identity
 from app.modules.music.models import Album, Artist, CatalogTrack, Favorite, MusicSetting, Track
 from app.modules.music.quality import attention_status, metadata_issues, needs_attention
-from app.modules.music.schemas import AlbumBrief, ArtistBrief, CatalogTrackBrief, CatalogTrackRead, TrackRead
+from app.modules.music.schemas import (
+    AlbumBrief,
+    ArtistBrief,
+    CatalogAlbumRead,
+    CatalogTrackBrief,
+    CatalogTrackRead,
+    TrackRead,
+)
 from app.modules.music.transfer.itunes import sized_artwork_url, spotify_search_url
 from app.storage.service import LocalMediaStorage, StagedFile
 
@@ -110,6 +119,52 @@ def serialize_catalog_track(item: CatalogTrack) -> CatalogTrackRead:
         track_id=track.id if track else None,
         artwork_id=track.artwork_id if track else None,
     )
+
+
+def lead_artist(names: list[str]) -> str:
+    unique = list(dict.fromkeys(names))
+    if len(unique) <= 1:
+        return unique[0] if unique else ""
+    prefix = os.path.commonprefix(unique).rstrip(" ,&").strip()
+    return prefix if len(prefix) >= 2 else "Разные исполнители"
+
+
+def group_catalog_albums(items: Sequence[CatalogTrack]) -> list[CatalogAlbumRead]:
+    groups: dict[str, list[CatalogTrack]] = {}
+    for item in items:
+        if not item.album_title:
+            continue
+        if item.collection_id:
+            key = f"apple:{item.collection_id}"
+        else:
+            key = f"{item.normalized_artist}|{normalize_identity(item.album_title)}"
+        groups.setdefault(key, []).append(item)
+    albums = []
+    for key, tracks in groups.items():
+        first = tracks[0]
+        linked = [item.track for item in tracks if item.track is not None]
+        with_art = next((track for track in linked if track.artwork_id), None)
+        apple_art = next((item for item in tracks if item.artwork_url), None)
+        years = [item.year for item in tracks if item.year]
+        album_url = next((item.apple_url for item in tracks if item.apple_url), None)
+        albums.append(
+            CatalogAlbumRead(
+                key=key,
+                collection_id=first.collection_id,
+                title=first.album_title or "",
+                artist_name=lead_artist([item.artist_name for item in tracks]),
+                track_artist_name=first.artist_name,
+                year=min(years) if years else None,
+                artwork_url=sized_artwork_url(apple_art.artwork_url) if apple_art else None,
+                artwork_id=with_art.artwork_id if with_art else None,
+                # Track links look like .../album/x/1?i=7001: without "i" the link opens the album.
+                apple_music_url=album_url.split("?")[0] if album_url else None,
+                track_count=len(tracks),
+                with_file=len(linked),
+                local_album_ids=sorted({track.album_id for track in linked if track.album_id}),
+            )
+        )
+    return sorted(albums, key=lambda album: (album.artist_name.casefold(), album.title.casefold()))
 
 
 def resolve_artist(db: Session, name: str) -> Artist:

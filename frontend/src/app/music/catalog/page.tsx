@@ -3,8 +3,8 @@
 import { ArrowRightLeft, Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CSSProperties, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Artwork } from "@/components/Artwork";
+import { CSSProperties, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { CatalogAlbumCard } from "@/components/CatalogAlbumCard";
 import { CatalogCard } from "@/components/CatalogCard";
 import { CatalogList } from "@/components/CatalogList";
 import { EmptyState, PageLoader } from "@/components/EmptyState";
@@ -13,18 +13,15 @@ import { api } from "@/lib/api";
 import {
   CATALOG_FILTERS,
   CatalogFilter,
-  catalogAlbumArtist,
-  catalogAlbumHref,
-  catalogAlbumKey,
   catalogArtworkSource,
-  loadAllCatalogTracks,
   useArtworkColor,
 } from "@/lib/catalog";
-import type { CatalogTrack, CatalogTrackPage } from "@/lib/types";
+import type { CatalogAlbum, CatalogTrack, CatalogTrackPage } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 
 const PAGE_SIZE = 60;
 const ENRICH_POLL_MS = 4000;
+const ALBUMS_STEP = 120;
 
 type View = "tracks" | "list" | "albums";
 const VIEWS: { value: View; label: string }[] = [
@@ -39,24 +36,6 @@ function parseView(value: string | null): View {
 
 function parseFilter(value: string | null): CatalogFilter {
   return CATALOG_FILTERS.some((option) => option.value === value) ? value as CatalogFilter : "all";
-}
-type CatalogAlbum = { key: string; title: string; artist: string; year: number | null; tracks: CatalogTrack[]; withFile: number; cover: CatalogTrack };
-
-function groupAlbums(items: CatalogTrack[]): CatalogAlbum[] {
-  const albums = new Map<string, CatalogAlbum>();
-  for (const item of items) {
-    if (!item.album_title) continue;
-    const key = catalogAlbumKey(item);
-    const album = albums.get(key) ?? { key, title: item.album_title, artist: item.artist_name, year: item.year, tracks: [], withFile: 0, cover: item };
-    album.tracks.push(item);
-    if (item.has_file) album.withFile += 1;
-    // A cover from a local file is preferred over Apple artwork for the whole album.
-    if (!album.cover.artwork_id && (item.artwork_id || (!album.cover.artwork_url && item.artwork_url))) album.cover = item;
-    album.year ??= item.year;
-    albums.set(key, album);
-  }
-  for (const album of albums.values()) album.artist = catalogAlbumArtist(album.tracks.map((track) => track.artist_name));
-  return [...albums.values()].sort((a, b) => a.artist.localeCompare(b.artist, "ru") || a.title.localeCompare(b.title, "ru"));
 }
 
 const FILTER_SUMMARY: Record<CatalogFilter, string> = {
@@ -74,23 +53,6 @@ function trackCountText(count: number) {
   if (ones === 1) return `${count} трек`;
   if (ones >= 2 && ones <= 4) return `${count} трека`;
   return `${count} треков`;
-}
-
-function CatalogAlbumCard({ album }: { album: CatalogAlbum }) {
-  const href = catalogAlbumHref(album.cover);
-  const missing = album.tracks.length - album.withFile;
-  return (
-    <article className={`catalog-card ${album.withFile ? "" : "no-file"}`}>
-      <div className="catalog-card-art">
-        <Link href={href} aria-label={`Альбом ${album.title}`}>
-          <Artwork id={album.cover.artwork_id} url={album.cover.artwork_url} alt={album.title} size={256} />
-        </Link>
-        {missing > 0 && <span className="catalog-badge">{album.withFile ? `Нет файлов: ${missing}` : "Нет файлов"}</span>}
-      </div>
-      <Link href={href} className="album-title">{album.title}</Link>
-      <div className="album-meta">{album.artist}{album.year ? ` · ${album.year}` : ""}</div>
-    </article>
-  );
 }
 
 export default function MusicCatalogPage() {
@@ -114,7 +76,8 @@ function MusicCatalog() {
   }
   const [items, setItems] = useState<CatalogTrack[] | null>(null);
   const [pages, setPages] = useState({ loaded: 0, total: 0, count: 0 });
-  const [albumItems, setAlbumItems] = useState<CatalogTrack[] | null>(null);
+  const [albums, setAlbums] = useState<CatalogAlbum[] | null>(null);
+  const [albumLimit, setAlbumLimit] = useState(ALBUMS_STEP);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const loadedPages = useRef(0);
@@ -166,8 +129,9 @@ function MusicCatalog() {
     try {
       const search = params(1);
       search.delete("page");
-      const loaded = await loadAllCatalogTracks(search);
-      setAlbumItems(loaded);
+      search.delete("page_size");
+      const loaded = await api<CatalogAlbum[]>(`/music/transfer/albums?${search}`);
+      setAlbums(loaded);
       setError("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Не удалось загрузить альбомы");
@@ -179,7 +143,7 @@ function MusicCatalog() {
     // Filters changed: show the skeleton instead of results for the previous filters.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setItems(null);
-    setAlbumItems(null);
+    setAlbums(null);
     void reload();
   }, [reload]);
 
@@ -220,7 +184,6 @@ function MusicCatalog() {
     setItems((current) => current?.map((item) => item.id === updated.id ? updated : item) ?? null);
   };
 
-  const albums = useMemo(() => albumItems ? groupAlbums(albumItems) : null, [albumItems]);
   const heroSource = items?.map((item) => catalogArtworkSource(item, 64)).find(Boolean) ?? null;
   const heroColor = useArtworkColor(heroSource);
   const style = heroColor ? { "--catalog-tint": heroColor } as CSSProperties : undefined;
@@ -285,9 +248,16 @@ function MusicCatalog() {
             </>
           ) : <EmptyState title="Ничего не найдено" description="Попробуйте другой запрос или фильтр." />
         ) : albums === null ? <CatalogSkeleton /> : albums.length ? (
-          <div className="catalog-grid" aria-label="Альбомы каталога">
-            {albums.map((album) => <CatalogAlbumCard key={album.key} album={album} />)}
-          </div>
+          <>
+            <div className="catalog-grid" aria-label="Альбомы каталога">
+              {albums.slice(0, albumLimit).map((album) => <CatalogAlbumCard key={album.key} album={album} />)}
+            </div>
+            {albums.length > albumLimit && (
+              <div className="catalog-more">
+                <button className="button" type="button" onClick={() => setAlbumLimit((value) => value + ALBUMS_STEP)}>Показать ещё</button>
+              </div>
+            )}
+          </>
         ) : <EmptyState title="Альбомов не найдено" description="У найденных треков нет названия альбома." />}
       </div>
     </div>
