@@ -5,6 +5,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import get_settings
+from app.database.text import SQLITE_CASEFOLD, sqlite_casefold
 
 
 class CoreBase(DeclarativeBase):
@@ -42,6 +43,10 @@ def _engine(url: str) -> Engine:
 
         @event.listens_for(engine, "connect")
         def configure_sqlite_connection(dbapi_connection: object, _: object) -> None:
+            # Unicode-aware case folding for search; SQLite's own lower() handles ASCII only.
+            dbapi_connection.create_function(  # type: ignore[attr-defined]
+                SQLITE_CASEFOLD, 1, sqlite_casefold, deterministic=True
+            )
             cursor = dbapi_connection.cursor()  # type: ignore[attr-defined]
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.execute("PRAGMA journal_mode=WAL")

@@ -389,6 +389,14 @@ class CatalogArtistDetail(CatalogArtistRead):
     tracks: list[CatalogTrackRead]
 
 
+class CatalogSearchRead(BaseModel):
+    tracks: list[CatalogTrackRead]
+    # All matching tracks; only the best `limit` of them are listed.
+    tracks_total: int
+    albums: list[CatalogAlbumRead]
+    artists: list[CatalogArtistRead]
+
+
 class CatalogFileLink(BaseModel):
     track_id: str
 

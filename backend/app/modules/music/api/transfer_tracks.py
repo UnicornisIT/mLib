@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.auth.dependencies import AdminUser, CurrentUser
 from app.core.config import Settings, get_settings
 from app.database.session import get_music_db as get_db
+from app.database.text import contains_text
 from app.modules.music.library import (
     DuplicateTrackError,
     catalog_album_groups,
@@ -17,6 +18,7 @@ from app.modules.music.library import (
     group_catalog_artists,
     import_staged_file,
     pagination,
+    primary_artist,
     serialize_catalog_track,
     serialize_track,
     track_query,
@@ -31,6 +33,7 @@ from app.modules.music.schemas import (
     CatalogFileLink,
     CatalogFileResult,
     CatalogGenreRead,
+    CatalogSearchRead,
     CatalogTrackPage,
     CatalogTrackRead,
 )
@@ -86,7 +89,7 @@ def catalog_filters(q: str | None, file_status: CatalogStatus, genre: str | None
             or_(
                 CatalogTrack.normalized_title.like(term),
                 CatalogTrack.normalized_artist.like(term),
-                CatalogTrack.album_title.ilike(f"%{q.strip()}%"),
+                contains_text(CatalogTrack.album_title, q),
             )
         )
     if file_status == "with_file":
@@ -164,6 +167,81 @@ def covering_albums(db: Session, albums: list[CatalogAlbumRead]) -> list[Catalog
     for album in albums:
         album.local_album_ids = [value for value in album.local_album_ids if value in covered]
     return albums
+
+
+def _search_rank(item: CatalogTrack, query: str) -> tuple[int, str]:
+    """Title matches first, then the artist's tracks, then everything found through the album."""
+    title, artist = item.normalized_title, normalize_identity(primary_artist(item.artist_name))
+    if title == query:
+        rank = 0
+    elif title.startswith(query):
+        rank = 1
+    elif artist == query or artist.startswith(query):
+        rank = 2
+    elif query in title:
+        rank = 3
+    elif query in item.normalized_artist:
+        rank = 4
+    else:
+        rank = 5
+    return rank, title
+
+
+@router.get("/search", response_model=CatalogSearchRead)
+def search_catalog(
+    q: str, _: CurrentUser, db: Annotated[Session, Depends(get_db)], limit: int = 20
+) -> CatalogSearchRead:
+    """Tracks, albums and artists of the catalog whose title, artist or album contains the query, in any case."""
+    query = normalize_identity(q)
+    if not query:
+        return CatalogSearchRead(tracks=[], tracks_total=0, albums=[], artists=[])
+    limit = min(50, max(1, limit))
+    term = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    matched = db.scalars(
+        select(CatalogTrack)
+        .where(
+            or_(
+                CatalogTrack.normalized_title.like(term, escape="\\"),
+                CatalogTrack.normalized_artist.like(term, escape="\\"),
+                contains_text(CatalogTrack.album_title, query),
+            )
+        )
+        .options(selectinload(CatalogTrack.track))
+    ).all()
+    tracks = sorted(matched, key=lambda item: _search_rank(item, query))
+
+    by_artist = [item for item in matched if query in normalize_identity(primary_artist(item.artist_name))]
+    artists = [artist for artist in group_catalog_artists(by_artist) if query in artist.key]
+    covered = fully_linked(db, Track.artist_id, {value for artist in artists for value in artist.local_artist_ids})
+    for artist in artists:
+        artist.local_artist_ids = [value for value in artist.local_artist_ids if value in covered]
+
+    titles = {
+        item.album_title
+        for item in matched
+        if item.album_title and (query in normalize_identity(item.album_title) or item in by_artist)
+    }
+    album_tracks = (
+        db.scalars(
+            select(CatalogTrack)
+            .where(CatalogTrack.album_title.in_(titles))
+            .options(selectinload(CatalogTrack.track))
+            .order_by(func.lower(CatalogTrack.title), CatalogTrack.id)
+        ).all()
+        if titles
+        else []
+    )
+    albums = [
+        album
+        for album in group_catalog_albums(album_tracks)
+        if query in normalize_identity(album.title) or query in normalize_identity(album.artist_name)
+    ]
+    return CatalogSearchRead(
+        tracks=[serialize_catalog_track(item) for item in tracks[:limit]],
+        tracks_total=len(tracks),
+        albums=covering_albums(db, albums[:limit]),
+        artists=artists[:limit],
+    )
 
 
 @router.get("/genres", response_model=list[CatalogGenreRead])

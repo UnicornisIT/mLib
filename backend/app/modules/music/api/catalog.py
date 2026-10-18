@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth.dependencies import CurrentUser
 from app.database.session import get_music_db as get_db
+from app.database.text import casefold, contains_text
 from app.modules.music.library import pagination, serialize_track, track_query
 from app.modules.music.models import Album, Artist, Track
 from app.modules.music.schemas import (
@@ -72,9 +73,9 @@ def list_albums(
     page_size = min(100, max(1, page_size))
     filters = []
     if q:
-        filters.append(Album.title.ilike(f"%{q.strip()}%"))
+        filters.append(contains_text(Album.title, q))
     if genre:
-        filters.append(func.lower(Album.genre) == genre.strip().lower())
+        filters.append(casefold(Album.genre) == genre.strip().casefold())
     total = int(db.scalar(select(func.count(Album.id)).where(*filters)) or 0)
     offset, limit, pages = pagination(total, page, page_size)
     rows = db.execute(
@@ -116,7 +117,7 @@ def list_artists(
 ) -> ArtistPage:
     page = max(1, page)
     page_size = min(100, max(1, page_size))
-    filters = [Artist.name.ilike(f"%{q.strip()}%")] if q else []
+    filters = [contains_text(Artist.name, q)] if q else []
     total = int(db.scalar(select(func.count(Artist.id)).where(*filters)) or 0)
     offset, limit, pages = pagination(total, page, page_size)
     artists = db.scalars(select(Artist).where(*filters).order_by(Artist.sort_name).offset(offset).limit(limit)).all()
@@ -168,19 +169,24 @@ def search(q: str, user: CurrentUser, db: Annotated[Session, Depends(get_db)], l
     if not query:
         return SearchRead(tracks=[], albums=[], artists=[])
     limit = min(25, max(1, limit))
-    term = f"%{query}%"
     track_rows = db.execute(
         track_query(user.id)
         .join(Artist)
         .outerjoin(Album)
-        .where(or_(Track.title.ilike(term), Artist.name.ilike(term), Album.title.ilike(term)))
+        .where(
+            or_(contains_text(Track.title, query), contains_text(Artist.name, query), contains_text(Album.title, query))
+        )
         .order_by(desc(Track.play_count), Track.title)
         .limit(limit)
     ).all()
     album_rows = db.execute(
-        album_aggregate_query().where(or_(Album.title.ilike(term), Album.album_artist.ilike(term))).limit(limit)
+        album_aggregate_query()
+        .where(or_(contains_text(Album.title, query), contains_text(Album.album_artist, query)))
+        .limit(limit)
     ).all()
-    artists = db.scalars(select(Artist).where(Artist.name.ilike(term)).order_by(Artist.sort_name).limit(limit)).all()
+    artists = db.scalars(
+        select(Artist).where(contains_text(Artist.name, query)).order_by(Artist.sort_name).limit(limit)
+    ).all()
     return SearchRead(
         tracks=[serialize_track(track, favorite) for track, favorite in track_rows],
         albums=[album_summary(album, count, duration) for album, count, duration in album_rows],

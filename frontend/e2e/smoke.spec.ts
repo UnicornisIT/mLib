@@ -265,6 +265,12 @@ test.describe("release smoke", () => {
 
     await page.goto("/music/tracks");
     await expect(page.getByRole("main").getByRole("button", { name: "Искала", exact: true })).toBeVisible();
+
+    // The top bar searches the catalog while typing, ignoring case in Cyrillic, without Enter.
+    await page.getByLabel("Поиск по медиатеке").fill("ЗЕМФ");
+    await expect(page).toHaveURL(/\/music\/search\?q=/);
+    await expect(page.getByRole("link", { name: "Исполнитель Земфира" })).toBeVisible();
+    await expect(page.getByRole("list", { name: "Список треков каталога" }).getByRole("listitem", { name: "Искала — Земфира" })).toBeVisible();
   });
 
   test("mobile setup screen has no horizontal overflow", async ({ page }, testInfo) => {

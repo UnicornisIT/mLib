@@ -347,6 +347,8 @@ a.stat-card.stat-link:hover { border-color: var(--accent); box-shadow: 0 8px 20p
 a.stat-card.stat-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .stat-link-hint { position: absolute; top: 14px; right: 14px; display: inline-flex; align-items: center; gap: 2px; color: var(--muted); font-size: 11px; font-weight: 620; }
 a.stat-card.stat-link:hover .stat-link-hint { color: var(--accent); }
+.search-results { transition: opacity .15s ease; }
+.search-results.stale { opacity: .55; }
 .catalog-more { display: flex; justify-content: center; margin-top: 34px; }
 .catalog-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; color: var(--muted); background: var(--surface-2); font-size: 11px; font-weight: 650; white-space: nowrap; }
 

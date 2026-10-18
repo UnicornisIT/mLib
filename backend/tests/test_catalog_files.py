@@ -412,3 +412,35 @@ def test_catalog_genres_are_backfilled_and_merged_with_library_files(
     listed = authenticated_client.get("/api/music/transfer/tracks", params={"genre": "Рок"}).json()
     assert [item["title"] for item in listed["items"]] == ["Искала"]
     assert listed["items"][0]["genre"] == "Рок"
+
+
+def test_search_ignores_case_in_cyrillic_and_covers_the_catalog(
+    authenticated_client: TestClient, db: Session, tmp_path: Path
+) -> None:
+    pushkin = add_card(db, "7101", "Песня Александра", "Александр Пушкин")
+    rock = add_card(db, "7102", "Другая", "Александр Пушкин & Гость")
+    other = add_card(db, "7103", "Александрия", "Кто-то")
+    for card in (pushkin, rock):
+        card.album_title = "Стихи"
+    other.album_title = "Город"
+    add_card(db, "7104", "Совсем другое", "Никто")
+    upload_files(authenticated_client, make_wav(tmp_path / "f.wav", title="Шёпот", artist="Файловый Исполнитель"))
+
+    found = authenticated_client.get("/api/music/transfer/search", params={"q": "александр"}).json()
+    assert found["tracks_total"] == 3
+    # Title matches come first, then tracks of the artist.
+    assert [item["title"] for item in found["tracks"]] == ["Александрия", "Другая", "Песня Александра"]
+    assert [artist["name"] for artist in found["artists"]] == ["Александр Пушкин"]
+    assert found["artists"][0]["track_count"] == 2
+    assert [(album["title"], album["track_count"]) for album in found["albums"]] == [("Стихи", 2)]
+    assert authenticated_client.get("/api/music/transfer/search", params={"q": "   "}).json()["tracks"] == []
+
+    # Library search, "All tracks" and the catalog filter ignore case in Cyrillic too.
+    local = authenticated_client.get("/api/music/search", params={"q": "шЁпот"}).json()
+    assert [track["title"] for track in local["tracks"]] == ["Шёпот"]
+    assert authenticated_client.get("/api/music/search", params={"q": "файловый"}).json()["artists"][0]["name"] == (
+        "Файловый Исполнитель"
+    )
+    assert authenticated_client.get("/api/music/tracks", params={"q": "ШЁПОТ"}).json()["total"] == 1
+    assert authenticated_client.get("/api/music/transfer/tracks", params={"q": "стихи"}).json()["total"] == 2
+    assert authenticated_client.get("/api/music/transfer/tracks", params={"q": "100%"}).json()["total"] == 0

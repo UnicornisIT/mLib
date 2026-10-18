@@ -13,6 +13,7 @@ from app.auth.dependencies import AdminUser, CurrentUser
 from app.core.config import Settings, get_settings
 from app.core.security import utcnow
 from app.database.session import get_music_db as get_db
+from app.database.text import casefold, contains_text
 from app.modules.music.library import (
     DuplicateTrackError,
     import_staged_file,
@@ -60,10 +61,11 @@ def list_tracks(
     predicates = []
     joins_artist = bool(q) or attention
     if q:
-        term = f"%{q.strip()}%"
-        predicates.append(or_(Track.title.ilike(term), Artist.name.ilike(term), Album.title.ilike(term)))
+        predicates.append(
+            or_(contains_text(Track.title, q), contains_text(Artist.name, q), contains_text(Album.title, q))
+        )
     if genre:
-        predicates.append(func.lower(Track.genre) == genre.strip().lower())
+        predicates.append(casefold(Track.genre) == genre.strip().casefold())
 
     count_stmt = select(func.count(func.distinct(Track.id))).select_from(Track)
     stmt = track_query(user.id)
