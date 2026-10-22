@@ -1,6 +1,10 @@
 import logging
 import math
+import re
 import uuid
+from collections import Counter
+from collections.abc import Sequence
+from functools import partial
 from pathlib import Path
 
 from sqlalchemy import select
@@ -12,7 +16,15 @@ from app.modules.music.artwork import save_artwork
 from app.modules.music.metadata import NormalizedTrackMetadata, extract_metadata, normalize_identity
 from app.modules.music.models import Album, Artist, CatalogTrack, Favorite, MusicSetting, Track
 from app.modules.music.quality import attention_status, metadata_issues, needs_attention
-from app.modules.music.schemas import AlbumBrief, ArtistBrief, CatalogTrackBrief, CatalogTrackRead, TrackRead
+from app.modules.music.schemas import (
+    AlbumBrief,
+    ArtistBrief,
+    CatalogAlbumRead,
+    CatalogArtistRead,
+    CatalogTrackBrief,
+    CatalogTrackRead,
+    TrackRead,
+)
 from app.modules.music.transfer.itunes import sized_artwork_url, spotify_search_url
 from app.storage.service import LocalMediaStorage, StagedFile
 
@@ -92,6 +104,10 @@ def catalog_brief(item: CatalogTrack) -> CatalogTrackBrief:
         title=item.title,
         artist_name=item.artist_name,
         album_title=item.album_title,
+        collection_id=item.collection_id,
+        album_key=catalog_album_key(item),
+        artist_key=catalog_artist_key(item),
+        genre=item.genre or None,
         year=item.year,
         duration_ms=item.duration_ms,
         artwork_url=sized_artwork_url(item.artwork_url),
@@ -107,7 +123,144 @@ def serialize_catalog_track(item: CatalogTrack) -> CatalogTrackRead:
         enrich_status=item.enrich_status,
         has_file=track is not None,
         track_id=track.id if track else None,
+        artwork_id=track.artwork_id if track else None,
     )
+
+
+def lead_artist(names: list[str]) -> str:
+    """Artist credited on most tracks: "Daft Punk & X" and "Daft Punk, Y" give "Daft Punk"."""
+    unique = list(dict.fromkeys(names))
+    if len(unique) <= 1:
+        return unique[0] if unique else ""
+    counts: Counter[str] = Counter()
+    spelling: dict[str, str] = {}
+    for name in names:
+        for part in FEATURED_ARTIST.split(name):
+            if part.strip():
+                normalized = normalize_identity(part)
+                spelling.setdefault(normalized, part.strip())
+                counts[normalized] += 1
+    artist, count = counts.most_common(1)[0]
+    return spelling[artist] if count * 2 > len(names) else VARIOUS_ARTISTS
+
+
+FEATURED_ARTIST = re.compile(r"\s*(?:,|&|\+|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b|\bx\b|\bи\b)\s*", re.IGNORECASE)
+
+
+def primary_artist(name: str) -> str:
+    """First credited artist: "Daft Punk, Pharrell Williams & Nile Rodgers" gives "Daft Punk"."""
+    return FEATURED_ARTIST.split(name, maxsplit=1)[0].strip() or name
+
+
+VARIOUS_ARTISTS = "Разные исполнители"
+
+
+def catalog_artist_key(item: CatalogTrack) -> str:
+    return normalize_identity(primary_artist(item.artist_name))
+
+
+def credited_artists(name: str) -> set[str]:
+    return {normalize_identity(part) for part in FEATURED_ARTIST.split(name) if part.strip()}
+
+
+def catalog_album_key(item: CatalogTrack) -> str | None:
+    """Album title and lead artist of a track; an album is found by the key of any of its tracks."""
+    if not item.album_title:
+        return None
+    return f"{normalize_identity(item.album_title)}|{normalize_identity(primary_artist(item.artist_name))}"
+
+
+def _union_root(parent: list[int], index: int) -> int:
+    while parent[index] != index:
+        parent[index] = parent[parent[index]]
+        index = parent[index]
+    return index
+
+
+def catalog_album_groups(items: Sequence[CatalogTrack]) -> list[tuple[str, set[str], list[CatalogTrack]]]:
+    """
+    Tracks with the same album title form one album when they share a credited artist or an Apple album:
+    editions of "Pieces of a Dream" and a soundtrack by many artists stay whole, while "Greatest Hits"
+    of two different artists stays apart.
+    """
+    by_title: dict[str, list[CatalogTrack]] = {}
+    for item in items:
+        if item.album_title:
+            by_title.setdefault(normalize_identity(item.album_title), []).append(item)
+    groups = []
+    for tracks in by_title.values():
+        parent = list(range(len(tracks)))
+        root = partial(_union_root, parent)
+        seen: dict[str, int] = {}
+        for index, item in enumerate(tracks):
+            links = {f"artist:{artist}" for artist in credited_artists(item.artist_name)}
+            if item.collection_id:
+                links.add(f"apple:{item.collection_id}")
+            for link in links:
+                if link in seen:
+                    parent[root(index)] = root(seen[link])
+                else:
+                    seen[link] = index
+        components: dict[int, list[CatalogTrack]] = {}
+        for index, item in enumerate(tracks):
+            components.setdefault(root(index), []).append(item)
+        for members in components.values():
+            keys = {key for key in map(catalog_album_key, members) if key}
+            groups.append((min(keys), keys, members))
+    return groups
+
+
+def group_catalog_albums(items: Sequence[CatalogTrack]) -> list[CatalogAlbumRead]:
+    albums = []
+    for key, _, tracks in catalog_album_groups(items):
+        first = tracks[0]
+        linked = [item.track for item in tracks if item.track is not None]
+        with_art = next((track for track in linked if track.artwork_id), None)
+        apple_art = next((item for item in tracks if item.artwork_url), None)
+        years = [item.year for item in tracks if item.year]
+        album_url = next((item.apple_url for item in tracks if item.apple_url), None)
+        artist = lead_artist([item.artist_name for item in tracks])
+        albums.append(
+            CatalogAlbumRead(
+                key=key,
+                title=first.album_title or "",
+                artist_name=artist,
+                artist_key=normalize_identity(artist) if artist != VARIOUS_ARTISTS else None,
+                year=min(years) if years else None,
+                artwork_url=sized_artwork_url(apple_art.artwork_url) if apple_art else None,
+                artwork_id=with_art.artwork_id if with_art else None,
+                # Track links look like .../album/x/1?i=7001: without "i" the link opens the album.
+                apple_music_url=album_url.split("?")[0] if album_url else None,
+                track_count=len(tracks),
+                with_file=len(linked),
+                local_album_ids=sorted({track.album_id for track in linked if track.album_id}),
+            )
+        )
+    return sorted(albums, key=lambda album: (album.artist_name.casefold(), album.title.casefold()))
+
+
+def group_catalog_artists(items: Sequence[CatalogTrack]) -> list[CatalogArtistRead]:
+    groups: dict[str, list[CatalogTrack]] = {}
+    for item in items:
+        groups.setdefault(catalog_artist_key(item), []).append(item)
+    artists = []
+    for key, tracks in groups.items():
+        linked = [item.track for item in tracks if item.track is not None]
+        with_art = next((track for track in linked if track.artwork_id), None)
+        apple_art = next((item for item in tracks if item.artwork_url), None)
+        artists.append(
+            CatalogArtistRead(
+                key=key,
+                name=primary_artist(tracks[0].artist_name),
+                artwork_url=sized_artwork_url(apple_art.artwork_url) if apple_art else None,
+                artwork_id=with_art.artwork_id if with_art else None,
+                album_count=len({normalize_identity(item.album_title) for item in tracks if item.album_title}),
+                track_count=len(tracks),
+                with_file=len(linked),
+                local_artist_ids=sorted({track.artist_id for track in linked}),
+            )
+        )
+    return sorted(artists, key=lambda artist: artist.name.casefold())
 
 
 def resolve_artist(db: Session, name: str) -> Artist:

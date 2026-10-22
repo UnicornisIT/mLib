@@ -15,32 +15,59 @@ def _chunks(values: list[str], size: int = LOOKUP_CHUNK):
         yield values[start : start + size]
 
 
-def _existing_catalog(
-    db: Session, tracks: list[SourceTrack]
-) -> tuple[dict[str, CatalogTrack], dict[str, CatalogTrack]]:
-    by_external: dict[str, CatalogTrack] = {}
-    by_isrc: dict[str, CatalogTrack] = {}
-    for chunk in _chunks([track.external_id for track in tracks]):
+def _existing_catalog(db: Session, tracks: list[SourceTrack]) -> dict[str, CatalogTrack]:
+    """Catalog entries the export already has, under the same aliases the parser uses for deduplication."""
+    found: dict[str, CatalogTrack] = {}
+    apple_ids = [track.apple_id for track in tracks if track.apple_id]
+    for chunk in _chunks(apple_ids):
         for item in db.scalars(select(CatalogTrack).where(CatalogTrack.apple_track_id.in_(chunk))):
-            by_external[item.apple_track_id] = item
+            found[f"apple:{item.apple_track_id}"] = item
     for chunk in _chunks([track.isrc for track in tracks if track.isrc]):
         for item in db.scalars(select(CatalogTrack).where(CatalogTrack.isrc.in_(chunk))):
-            by_isrc.setdefault(item.isrc or "", item)
-    return by_external, by_isrc
+            found.setdefault(f"isrc:{item.isrc}", item)
+    services: dict[str, list[str]] = {}
+    for track in tracks:
+        if track.service and track.service_id:
+            services.setdefault(track.service, []).append(track.service_id)
+    for service, ids in services.items():
+        for chunk in _chunks(ids):
+            for item in db.scalars(
+                select(CatalogTrack).where(
+                    CatalogTrack.source_service == service, CatalogTrack.source_track_id.in_(chunk)
+                )
+            ):
+                found[f"{service}:{item.source_track_id}"] = item
+    for chunk in _chunks(list({normalize_identity(track.title) for track in tracks})):
+        for item in db.scalars(select(CatalogTrack).where(CatalogTrack.normalized_title.in_(chunk))):
+            found.setdefault(f"name:{item.normalized_artist}|{item.normalized_title}", item)
+    return found
+
+
+def _match(found: dict[str, CatalogTrack], source: SourceTrack) -> CatalogTrack | None:
+    if source.apple_id:
+        # Two different Apple ids are two different recordings even when they share a title.
+        return found.get(f"apple:{source.apple_id}") or (found.get(f"isrc:{source.isrc}") if source.isrc else None)
+    aliases = [source.key]
+    if source.isrc:
+        aliases.append(f"isrc:{source.isrc}")
+    aliases.append(f"name:{normalize_identity(source.artist)}|{normalize_identity(source.title)}")
+    return next((found[alias] for alias in aliases if alias in found), None)
 
 
 def import_library(db: Session, job: TransferJob, parsed: ParsedLibrary) -> dict[str, CatalogTrack]:
     """Adds unknown tracks to the catalog. Never removes or rewrites existing entries."""
-    by_external, by_isrc = _existing_catalog(db, parsed.tracks)
+    found = _existing_catalog(db, parsed.tracks)
     resolved: dict[str, CatalogTrack] = {}
     added = existing = 0
     for source in parsed.tracks:
-        catalog_track = by_external.get(source.external_id) or (by_isrc.get(source.isrc) if source.isrc else None)
+        catalog_track = _match(found, source)
         if catalog_track is not None:
             existing += 1
         else:
             catalog_track = CatalogTrack(
-                apple_track_id=source.external_id,
+                apple_track_id=source.apple_id,
+                source_service=source.service,
+                source_track_id=source.service_id,
                 isrc=source.isrc,
                 title=source.title,
                 artist_name=source.artist,
@@ -52,11 +79,16 @@ def import_library(db: Session, job: TransferJob, parsed: ParsedLibrary) -> dict
                 enrich_status="pending",
             )
             db.add(catalog_track)
-            by_external[source.external_id] = catalog_track
-            if source.isrc:
-                by_isrc[source.isrc] = catalog_track
             added += 1
-        resolved[source.external_id] = catalog_track
+        for alias in (
+            source.key,
+            f"apple:{source.apple_id}" if source.apple_id else None,
+            f"isrc:{source.isrc}" if source.isrc else None,
+            f"name:{catalog_track.normalized_artist}|{catalog_track.normalized_title}",
+        ):
+            if alias:
+                found.setdefault(alias, catalog_track)
+        resolved[source.key] = catalog_track
     job.rows_total = parsed.rows_total
     job.unique_total = len(parsed.tracks)
     job.added = added
@@ -72,7 +104,7 @@ def import_playlists(
 ) -> list[str]:
     """Creates (or extends) one playlist per "Playlist name"; entries already present are kept once."""
     touched: list[str] = []
-    for name, external_ids in playlists.items():
+    for name, keys in playlists.items():
         playlist = db.scalar(
             select(Playlist).where(Playlist.owner_id == owner_id, Playlist.name == name, Playlist.is_system.is_(False))
         )
@@ -85,8 +117,8 @@ def import_playlists(
             item.track.catalog_track_id for item in playlist.items if item.track and item.track.catalog_track_id
         }
         position = max((item.position for item in playlist.items), default=-1) + 1
-        for external_id in external_ids:
-            catalog_track = resolved.get(external_id)
+        for key in keys:
+            catalog_track = resolved.get(key)
             if catalog_track is None or catalog_track.id in present:
                 continue
             db.add(PlaylistTrack(playlist_id=playlist.id, catalog_track_id=catalog_track.id, position=position))

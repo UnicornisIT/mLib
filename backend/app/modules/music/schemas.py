@@ -26,11 +26,16 @@ class CatalogTrackBrief(BaseModel):
     """Catalog data shown for a file linked to a catalog track; the file's own tags stay untouched."""
 
     id: str
-    apple_track_id: str
+    apple_track_id: str | None = None
     isrc: str | None = None
     title: str
     artist_name: str
     album_title: str | None = None
+    collection_id: str | None = None
+    # Catalog album this track belongs to: same album title and lead artist.
+    album_key: str | None = None
+    artist_key: str | None = None
+    genre: str | None = None
     year: int | None = None
     duration_ms: int | None = None
     # Apple artwork is only linked, never downloaded; artwork embedded in the file takes priority.
@@ -44,6 +49,8 @@ class CatalogTrackRead(CatalogTrackBrief):
     enrich_status: Literal["pending", "enriched", "not_found", "error"]
     has_file: bool
     track_id: str | None = None
+    # Artwork embedded in the linked file; shown instead of artwork_url when present.
+    artwork_id: str | None = None
 
 
 class TrackRead(BaseModel):
@@ -173,6 +180,11 @@ class GenreRead(BaseModel):
     name: str
     track_count: int
     album_count: int
+
+
+class CatalogGenreRead(GenreRead):
+    # Catalog tracks of the genre; the rest are library files that are not linked to the catalog.
+    catalog_count: int
 
 
 class UploadResult(BaseModel):
@@ -333,6 +345,56 @@ class CatalogTrackPage(BaseModel):
     page_size: int
     total: int
     pages: int
+
+
+class CatalogAlbumRead(BaseModel):
+    """Catalog tracks with the same album title and lead artist, across Apple editions."""
+
+    key: str
+    title: str
+    # Lead artist shared by the tracks: "Daft Punk & X" and "Daft Punk, Y" give "Daft Punk".
+    artist_name: str
+    # Catalog artist page of the lead artist; none for "various artists".
+    artist_key: str | None = None
+    year: int | None = None
+    artwork_url: str | None = None
+    artwork_id: str | None = None
+    apple_music_url: str | None = None
+    track_count: int
+    with_file: int
+    # Library albums built from the tags of linked files; the catalog album stands in for them.
+    local_album_ids: list[str] = []
+
+
+class CatalogAlbumDetail(CatalogAlbumRead):
+    tracks: list[CatalogTrackRead]
+
+
+class CatalogArtistRead(BaseModel):
+    """Lead artist of catalog tracks; featured artists stay on the track of the lead artist."""
+
+    key: str
+    name: str
+    artwork_url: str | None = None
+    artwork_id: str | None = None
+    album_count: int
+    track_count: int
+    with_file: int
+    # Library artists built from the tags of linked files; the catalog artist stands in for them.
+    local_artist_ids: list[str] = []
+
+
+class CatalogArtistDetail(CatalogArtistRead):
+    albums: list[CatalogAlbumRead]
+    tracks: list[CatalogTrackRead]
+
+
+class CatalogSearchRead(BaseModel):
+    tracks: list[CatalogTrackRead]
+    # All matching tracks; only the best `limit` of them are listed.
+    tracks_total: int
+    albums: list[CatalogAlbumRead]
+    artists: list[CatalogArtistRead]
 
 
 class CatalogFileLink(BaseModel):

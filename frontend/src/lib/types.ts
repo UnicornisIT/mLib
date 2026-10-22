@@ -68,6 +68,7 @@ export type Artist = {
 export type ArtistDetail = Artist & { albums: Album[]; tracks: Track[] };
 export type ArtistPage = { items: Artist[]; page: number; page_size: number; total: number; pages: number };
 export type Genre = { name: string; track_count: number; album_count: number };
+export type CatalogGenre = Genre & { catalog_count: number };
 export type User = {
   id: string;
   username: string;
@@ -113,11 +114,14 @@ export type ImportJob = {
 };
 export type CatalogTrackBrief = {
   id: string;
-  apple_track_id: string;
+  apple_track_id: string | null;
   isrc: string | null;
   title: string;
   artist_name: string;
   album_title: string | null;
+  collection_id: string | null;
+  album_key: string | null;
+  artist_key: string | null;
   year: number | null;
   duration_ms: number | null;
   artwork_url: string | null;
@@ -128,7 +132,36 @@ export type CatalogTrack = CatalogTrackBrief & {
   enrich_status: "pending" | "enriched" | "not_found" | "error";
   has_file: boolean;
   track_id: string | null;
+  /** Artwork embedded in the linked file; wins over artwork_url. */
+  artwork_id: string | null;
 };
+export type CatalogAlbum = {
+  key: string;
+  title: string;
+  artist_name: string;
+  artist_key: string | null;
+  year: number | null;
+  artwork_url: string | null;
+  artwork_id: string | null;
+  apple_music_url: string | null;
+  track_count: number;
+  with_file: number;
+  local_album_ids: string[];
+};
+export type CatalogArtist = {
+  key: string;
+  name: string;
+  artwork_url: string | null;
+  artwork_id: string | null;
+  album_count: number;
+  track_count: number;
+  with_file: number;
+  local_artist_ids: string[];
+};
+export type CatalogArtistDetail = CatalogArtist & { albums: CatalogAlbum[]; tracks: CatalogTrack[] };
+export type CatalogAlbumDetail = CatalogAlbum & { tracks: CatalogTrack[] };
+export type CatalogTrackPage = { items: CatalogTrack[]; page: number; page_size: number; total: number; pages: number };
+export type CatalogFileResult = { status: "added" | "linked_existing"; detail: string; catalog_track: CatalogTrack; track: Track };
 export type TransferJob = {
   id: string;
   source: string;

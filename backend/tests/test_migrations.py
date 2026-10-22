@@ -138,6 +138,34 @@ def test_library_transfer_migration_keeps_existing_music_data(tmp_path: Path) ->
         pass
     connection.close()
 
+    # 0007 only lifts NOT NULL from apple_track_id: links of files and playlists to the catalog must survive.
+    def catalog_links() -> list[tuple]:
+        connection = sqlite3.connect(database)
+        try:
+            return [
+                *connection.execute("SELECT id, catalog_track_id FROM music_tracks ORDER BY id"),
+                *connection.execute("SELECT id, catalog_track_id FROM music_playlist_tracks ORDER BY id"),
+            ]
+        finally:
+            connection.close()
+
+    links = catalog_links()
+    _music_alembic(env, "downgrade", "0006_track_isrc")
+    assert not {"source_service", "source_track_id"} & _columns(database, "music_catalog_tracks")
+    _music_alembic(env, "upgrade", "head")
+    assert catalog_links() == links
+    assert {"source_service", "source_track_id"} <= _columns(database, "music_catalog_tracks")
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "INSERT INTO music_catalog_tracks (id, title, artist_name, normalized_title, normalized_artist, source, "
+        "source_service, source_track_id, enrich_status, enrich_attempts, created_at, updated_at) VALUES "
+        "('card-3', 'Teardrop', 'Massive Attack', 'teardrop', 'massive attack', 'spotify', 'spotify', 'x1', "
+        "'pending', 0, '2026-01-01', '2026-01-01')"
+    )
+    connection.commit()
+    assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    connection.close()
+
     _music_alembic(env, "downgrade", "0003_metadata_provenance")
     assert _legacy_rows(database)["tracks"] == before["tracks"]
     assert _legacy_rows(database)["favorites"] == before["favorites"]

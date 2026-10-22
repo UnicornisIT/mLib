@@ -5,6 +5,7 @@ import {
   CircleUserRound,
   Compass,
   Disc3,
+  GalleryVerticalEnd,
   Heart,
   LibraryBig,
   ListMusic,
@@ -20,6 +21,7 @@ import { useAuth } from "@/providers/AuthProvider";
 
 const links = [
   { href: "/music", label: "Главная", icon: Compass },
+  { href: "/music/catalog", label: "Каталог", icon: GalleryVerticalEnd },
   { href: "/music/tracks", label: "Все треки", icon: LibraryBig },
   { href: "/music/albums", label: "Альбомы", icon: Album },
   { href: "/music/artists", label: "Исполнители", icon: UsersRound },
@@ -32,7 +34,9 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useAuth();
-  const isActive = (href: string) => href === "/music" ? pathname === "/music" : pathname.startsWith(href);
+  // Catalog artist and album pages belong to the Artists and Albums sections.
+  const section = pathname.startsWith("/music/catalog/artist") ? "/music/artists" : pathname.startsWith("/music/catalog/album") ? "/music/albums" : pathname;
+  const isActive = (href: string) => href === "/music" ? section === "/music" : section.startsWith(href);
   return (
     <>
       {open && <button className="sidebar-scrim" onClick={onClose} aria-label="Закрыть меню" />}
@@ -46,13 +50,13 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           </button>
         </div>
         <nav className="nav-group" aria-label="Музыкальная библиотека">
-          {links.slice(0, 5).map(({ href, label, icon: Icon }) => (
+          {links.slice(0, 6).map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href} className={`nav-item ${isActive(href) ? "active" : ""}`} onClick={onClose}>
               <Icon size={18} strokeWidth={1.8} /> {label}
             </Link>
           ))}
           <div className="nav-label">Моя коллекция</div>
-          {links.slice(5).map(({ href, label, icon: Icon }) => (
+          {links.slice(6).map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href} className={`nav-item ${isActive(href) ? "active" : ""}`} onClick={onClose}>
               <Icon size={18} strokeWidth={1.8} /> {label}
             </Link>

@@ -50,6 +50,9 @@ def metadata_issues(track: Track) -> list[MetadataIssue]:
 
 def attention_status(track: Track, issues: list[MetadataIssue] | None = None) -> MetadataStatus:
     issues = issues if issues is not None else metadata_issues(track)
+    # A file linked to a catalog track is shown with catalog data, so its own tags need no attention.
+    if track.catalog_track_id is not None:
+        return "complete"
     critical = "missing_title" in issues or "unknown_artist" in issues
     incomplete_count = sum(issue in {"missing_album", "missing_genre", "missing_year"} for issue in issues)
     if track.metadata_reviewed_at is not None and (critical or incomplete_count >= 2):
@@ -80,4 +83,4 @@ def attention_filter():
         title.in_(UNKNOWN_TITLES),
         artist.in_(UNKNOWN_ARTISTS),
     )
-    return and_(Track.metadata_reviewed_at.is_(None), or_(critical, incomplete))
+    return and_(Track.metadata_reviewed_at.is_(None), Track.catalog_track_id.is_(None), or_(critical, incomplete))

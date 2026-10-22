@@ -5,13 +5,13 @@ import { deflateSync } from "node:zlib";
 const username = "release-user";
 const password = "correct horse battery staple";
 
-function taggedWav() {
+function taggedWav(tone = 440) {
   const sampleRate = 8_000;
   const seconds = 3;
   const samples = sampleRate * seconds;
   const pcm = Buffer.alloc(samples * 2);
   for (let index = 0; index < samples; index += 1) {
-    const sample = Math.round(Math.sin((2 * Math.PI * 440 * index) / sampleRate) * 5_000);
+    const sample = Math.round(Math.sin((2 * Math.PI * tone * index) / sampleRate) * 5_000);
     pcm.writeInt16LE(sample, index * 2);
   }
   const chunk = (id: string, data: Buffer) => {
@@ -162,8 +162,8 @@ test.describe("release smoke", () => {
     await page.getByRole("link", { name: /Перенести фонотеку/ }).click();
     await expect(page.getByRole("heading", { name: "Перенести фонотеку" })).toBeVisible();
 
-    const input = page.getByLabel("Файл экспорта Apple Music");
-    await input.setInputFiles({ name: "broken.csv", mimeType: "text/csv", buffer: Buffer.from("Track name,Artist name\nA,B\n") });
+    const input = page.getByLabel("Файл экспорта TuneMyMusic");
+    await input.setInputFiles({ name: "broken.csv", mimeType: "text/csv", buffer: Buffer.from("Name,Singer\nA,B\n") });
     await page.getByRole("button", { name: "Перенести", exact: true }).click();
     await expect(page.getByRole("main").getByRole("alert")).toContainText("нет обязательных колонок");
 
@@ -179,18 +179,98 @@ test.describe("release smoke", () => {
 
     const job = page.getByRole("region", { name: "Последний перенос" });
     await expect(job.getByText("Перенос завершён")).toBeVisible({ timeout: 30_000 });
-    await expect(job.getByText("library.csv")).toBeVisible();
+    await expect(job.getByText("Apple Music · library.csv")).toBeVisible();
     await expect(job.locator("div", { has: page.getByText("Добавлено", { exact: true }) }).getByRole("definition")).toHaveText("2");
     await expect(job.locator("div", { has: page.getByText("Строк в файле", { exact: true }) }).getByRole("definition")).toHaveText("3");
     await page.reload();
     await expect(page.getByRole("region", { name: "Последний перенос" }).getByText("library.csv")).toBeVisible();
 
+    // TuneMyMusic writes every source service to the same layout; only the id column differs.
+    const spotify = [
+      "Track name,Artist name,Album,Playlist name,Type,ISRC,Spotify \u2013 id",
+      "Teardrop,Massive Attack,Mezzanine,,Favorite,,67Hna13dNDkZvBpTXRIaOJ",
+      "Искала,Земфира,Земфира,,Favorite,RUA119900001,4uLU6hMCjMI75M1A2tKUQC",
+    ].join("\n");
+    await page.getByLabel("Файл экспорта TuneMyMusic").setInputFiles({ name: "spotify.csv", mimeType: "text/csv", buffer: Buffer.from(spotify) });
+    await page.getByRole("button", { name: "Перенести", exact: true }).click();
+    const spotifyJob = page.getByRole("region", { name: "Последний перенос" });
+    await expect(spotifyJob.getByText("Spotify · spotify.csv")).toBeVisible({ timeout: 30_000 });
+    await expect(spotifyJob.locator("div", { has: page.getByText("Добавлено", { exact: true }) }).getByRole("definition")).toHaveText("1");
+    await expect(spotifyJob.locator("div", { has: page.getByText("Уже было", { exact: true }) }).getByRole("definition")).toHaveText("1");
+
+    // Catalog counters open a readable list of the catalog.
+    await page.getByRole("link", { name: /треков в каталоге — открыть список/ }).click();
+    await expect(page).toHaveURL(/\/music\/catalog\?view=list/);
+    const list = page.getByRole("list", { name: "Список треков каталога" });
+    await expect(list.getByRole("listitem")).toHaveCount(3);
+    await expect(list.getByRole("listitem", { name: "Искала — Земфира" }).getByText("Не найден в Apple")).toBeVisible();
+    await expect(list.getByRole("listitem", { name: "Искала — Земфира" }).getByRole("link", { name: "Spotify" })).toHaveAttribute("href", /open\.spotify\.com\/search/);
+    await page.getByRole("button", { name: "Найдены в Apple", exact: true }).click();
+    await expect(page).toHaveURL(/status=enriched/);
+    await expect(page.getByText("Ничего не найдено")).toBeVisible();
+
     await page.goto("/music/profile");
-    await expect(page.getByRole("link", { name: /Перенести фонотеку/ })).toContainText("2 трека в каталоге");
+    await expect(page.getByRole("link", { name: /Перенести фонотеку/ })).toContainText("3 трека в каталоге");
     await page.goto("/music/playlists");
     await page.getByRole("button", { name: /Дорога/ }).click();
     await expect(page.getByRole("main").getByText("Искала")).toBeVisible();
     await expect(page.getByRole("main").getByText(/нет файла/).first()).toBeVisible();
+
+    // Albums of the export appear in the Albums section before any file is added.
+    await page.goto("/music/albums");
+    await expect(page.getByRole("article", { name: "Земфира — Земфира" }).getByText("Нет файлов")).toBeVisible();
+    // So do the artists; a catalog artist page lists the albums and tracks.
+    await page.goto("/music/artists");
+    await page.getByRole("link", { name: "Исполнитель Земфира" }).click();
+    await expect(page.getByRole("heading", { name: "Земфира", level: 1 })).toBeVisible();
+    await expect(page.getByRole("list", { name: "Список треков каталога" }).getByRole("listitem", { name: "Искала — Земфира" })).toBeVisible();
+    await expect(page.locator(".nav-item", { hasText: "Исполнители" })).toHaveClass(/active/);
+
+    await page.goto("/music/catalog");
+    await expect(page.getByRole("heading", { name: "Каталог", exact: true })).toBeVisible();
+    const grid = page.getByLabel("Треки каталога");
+    await expect(grid.getByRole("article")).toHaveCount(3);
+    await expect(grid.getByRole("article", { name: "Искала — Земфира" }).getByText("Нет файла")).toBeVisible();
+    await page.getByRole("button", { name: "С файлом", exact: true }).click();
+    await expect(page.getByText("Ничего не найдено")).toBeVisible();
+    await page.getByRole("button", { name: "Все", exact: true }).click();
+    await page.getByRole("tab", { name: "Альбомы" }).click();
+    await expect(page.getByLabel("Альбомы каталога").getByRole("link", { name: "Альбом Земфира" })).toBeVisible();
+    await page.getByRole("tab", { name: "Обложки" }).click();
+
+    // Drag-and-drop straight into a card that has no file.
+    const card = grid.getByRole("article", { name: "Hello, World — Тестовый артист" });
+    const dropped = await page.evaluateHandle((bytes) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([new Uint8Array(bytes)], "hello.wav", { type: "audio/wav" }));
+      return transfer;
+    }, [...taggedWav(523)]);
+    await card.dispatchEvent("dragenter", { dataTransfer: dropped });
+    await expect(card.getByText("Отпустите, чтобы добавить файл")).toBeVisible();
+    await card.dispatchEvent("drop", { dataTransfer: dropped });
+    await expect(page.getByText("Файл добавлен в «Hello, World»")).toBeVisible({ timeout: 30_000 });
+    await expect(card.getByText("Нет файла")).toBeHidden();
+    await expect(card.getByRole("button", { name: "Воспроизвести Hello, World" })).toBeVisible();
+
+    // Upload by button on the catalog track page; catalog data replaces the file's tags on screen.
+    await grid.getByRole("link", { name: "Искала", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Искала" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Найти в Spotify" })).toHaveAttribute("href", /open\.spotify\.com\/search/);
+    await page.getByLabel("Аудиофайл для трека").setInputFiles({ name: "rip.wav", mimeType: "audio/wav", buffer: taggedWav(660) });
+    await expect(page.getByRole("region", { name: "Файл" }).getByText("Файл в медиатеке")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Теги файла: Release Track — Test Artist/)).toBeVisible();
+    await page.getByRole("button", { name: "Слушать" }).click();
+    await expect(page.getByRole("contentinfo", { name: "Музыкальный плеер" }).getByText("Искала")).toBeVisible();
+    await page.getByRole("contentinfo", { name: "Музыкальный плеер" }).getByRole("button", { name: "Пауза" }).click();
+
+    await page.goto("/music/tracks");
+    await expect(page.getByRole("main").getByRole("button", { name: "Искала", exact: true })).toBeVisible();
+
+    // The top bar searches the catalog while typing, ignoring case in Cyrillic, without Enter.
+    await page.getByLabel("Поиск по медиатеке").fill("ЗЕМФ");
+    await expect(page).toHaveURL(/\/music\/search\?q=/);
+    await expect(page.getByRole("link", { name: "Исполнитель Земфира" })).toBeVisible();
+    await expect(page.getByRole("list", { name: "Список треков каталога" }).getByRole("listitem", { name: "Искала — Земфира" })).toBeVisible();
   });
 
   test("mobile setup screen has no horizontal overflow", async ({ page }, testInfo) => {
@@ -217,7 +297,7 @@ test.describe("release smoke", () => {
       { width: 375, height: 812 },
       { width: 360, height: 800 },
     ];
-    const releaseRoutes = ["/", "/music", "/movie", "/books", "/collections", "/games", "/wishes"];
+    const releaseRoutes = ["/", "/music", "/music/catalog", "/movie", "/books", "/collections", "/games", "/wishes"];
     const allowedOverflowPixels = 1;
 
     for (const viewport of viewports) {

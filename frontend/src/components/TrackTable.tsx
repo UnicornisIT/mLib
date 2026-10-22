@@ -3,6 +3,7 @@
 import {
   CircleCheck,
   Heart,
+  Library,
   ListEnd,
   ListPlus,
   MoreHorizontal,
@@ -19,9 +20,10 @@ import { useState } from "react";
 import { Artwork } from "@/components/Artwork";
 import { GenreCombobox } from "@/components/GenreCombobox";
 import { api } from "@/lib/api";
+import { catalogHref, trackArtistHref, trackDisplay } from "@/lib/catalog";
 import { formatDate, formatTime } from "@/lib/format";
 import { metadataIssueText } from "@/lib/metadata-quality";
-import type { Playlist, Track } from "@/lib/types";
+import type { CatalogTrack, Playlist, Track } from "@/lib/types";
 import { useFeedback } from "@/providers/FeedbackProvider";
 import { usePlayer } from "@/providers/PlayerProvider";
 
@@ -42,6 +44,8 @@ export function TrackTable({
   const [editing, setEditing] = useState<Track | null>(null);
   const [playlistTrack, setPlaylistTrack] = useState<Track | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [catalogTrack, setCatalogTrack] = useState<Track | null>(null);
+  const [candidates, setCandidates] = useState<CatalogTrack[] | null>(null);
   const [overrides, setOverrides] = useState<Record<string, Track>>({});
   const displayTracks = tracks.map((track) => overrides[track.id] ?? track);
 
@@ -78,6 +82,30 @@ export function TrackTable({
     setPlaylistTrack(null);
     feedback.notify(`Трек добавлен в «${playlist.name}»`);
   };
+  const chooseCatalog = async (track: Track) => {
+    setMenu(null);
+    setCatalogTrack(track);
+    setCandidates(null);
+    try {
+      setCandidates(await api<CatalogTrack[]>(`/music/transfer/candidates/${track.id}`));
+    } catch (error) {
+      setCatalogTrack(null);
+      feedback.notify(error instanceof Error ? error.message : "Не удалось найти треки каталога", "error");
+    }
+  };
+  const linkCatalog = async (candidate: CatalogTrack) => {
+    if (!catalogTrack) return;
+    try {
+      const result = await api<{ track: Track }>(`/music/transfer/tracks/${candidate.id}/file`, { method: "PUT", body: { track_id: catalogTrack.id } });
+      setOverrides((values) => ({ ...values, [result.track.id]: result.track }));
+      player.updateTrack(result.track);
+      setCatalogTrack(null);
+      feedback.notify(`Файл привязан к «${candidate.title}»`);
+      window.dispatchEvent(new Event("mlib:library-changed"));
+    } catch (error) {
+      feedback.notify(error instanceof Error ? error.message : "Не удалось привязать файл", "error");
+    }
+  };
   const markMetadataReviewed = async (track: Track) => {
     const updated = await api<Track>(`/music/tracks/${track.id}/metadata-reviewed`, { method: "POST" });
     setOverrides((values) => ({ ...values, [track.id]: updated }));
@@ -97,16 +125,17 @@ export function TrackTable({
         )}
         {displayTracks.map((track, index) => {
           const isCurrent = player.current?.id === track.id;
+          const shown = trackDisplay(track);
           return (
             <div className={`track-row ${isCurrent ? "current" : ""}`} key={track.id}>
               <div className="track-index">
                 <span className="track-index-number">{startIndex + index + 1}</span>
-                <button className="icon-button small row-play" onClick={() => isCurrent ? player.togglePlay() : player.playTrack(track, displayTracks)} aria-label={`Воспроизвести ${track.title}`}>
+                <button className="icon-button small row-play" onClick={() => isCurrent ? player.togglePlay() : player.playTrack(track, displayTracks)} aria-label={`Воспроизвести ${shown.title}`}>
                   {isCurrent && player.playing ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
                 </button>
               </div>
               <div className="track-main">
-                <div className="track-art"><Artwork id={track.artwork_id} alt={track.title} size={64} /></div>
+                <div className="track-art"><Artwork id={track.artwork_id} url={shown.artworkUrl} alt={shown.title} size={64} /></div>
                 <div className="track-copy">
                   <div className="track-title-line">
                     {track.needs_attention && (
@@ -120,13 +149,13 @@ export function TrackTable({
                         <span aria-hidden="true">!</span>
                       </button>
                     )}
-                    <button className="track-title" style={{ border: 0, padding: 0, background: "none", cursor: "pointer" }} onDoubleClick={() => player.playTrack(track, displayTracks)}>{track.title}</button>
+                    <button className="track-title" style={{ border: 0, padding: 0, background: "none", cursor: "pointer" }} onDoubleClick={() => player.playTrack(track, displayTracks)}>{shown.title}</button>
                   </div>
-                  <Link className="track-subtitle" href={`/music/artists/${track.artist.id}`}>{track.artist.name}</Link>
+                  <Link className="track-subtitle" href={trackArtistHref(track)}>{shown.artist}</Link>
                 </div>
               </div>
               <div className="track-col-album truncate">
-                {track.album ? <Link className="track-link" href={`/music/albums/${track.album.id}`}>{track.album.title}</Link> : <span className="track-link">—</span>}
+                {track.album ? <Link className="track-link" href={`/music/albums/${track.album.id}`}>{shown.album}</Link> : <span className="track-link">{shown.album ?? "—"}</span>}
               </div>
               <span className="track-col-genre truncate" style={{ color: "var(--muted)" }}>{track.genre ?? "—"}</span>
               <span className="track-col-date" style={{ color: "var(--muted)" }}>{formatDate(track.date_added)}</span>
@@ -146,6 +175,9 @@ export function TrackTable({
                     <button className="action-item" onClick={() => void choosePlaylist(track)}><Plus size={15} />Добавить в плейлист</button>
                     <button className="action-item" onClick={() => void toggleFavorite(track).then(() => setMenu(null))}><Heart size={15} />{track.favorite ? "Убрать из любимых" : "Добавить в любимые"}</button>
                     <button className="action-item" onClick={() => { setEditing(track); setMenu(null); }}><Pencil size={15} />Редактировать</button>
+                    {track.catalog
+                      ? <Link className="action-item" href={catalogHref(track.catalog.id)} onClick={() => setMenu(null)}><Library size={15} />Открыть в каталоге</Link>
+                      : <button className="action-item" onClick={() => void chooseCatalog(track)}><Library size={15} />Связать с каталогом</button>}
                     {track.needs_attention && <button className="action-item" onClick={() => void markMetadataReviewed(track)}><CircleCheck size={15} />Метаданные верны</button>}
                     <button className="action-item danger" onClick={() => void remove(track)}><Trash2 size={15} />Удалить из библиотеки</button>
                   </div>
@@ -162,6 +194,27 @@ export function TrackTable({
         window.dispatchEvent(new Event("mlib:library-changed"));
         onChanged?.();
       }} />}
+      {catalogTrack && (
+        <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setCatalogTrack(null)}>
+          <div className="modal" style={{ width: 460 }} role="dialog" aria-modal="true" aria-label="Связать с каталогом">
+            <div className="modal-header"><h2>Связать с каталогом</h2><button className="icon-button" onClick={() => setCatalogTrack(null)} aria-label="Закрыть"><X size={18} /></button></div>
+            <div className="modal-body">
+              {candidates === null ? <div className="skeleton skeleton-row" /> : candidates.length ? (
+                <>
+                <p style={{ marginTop: 0, color: "var(--muted)" }}>Треки каталога без файла, похожие на «{catalogTrack.title}». Теги файла не изменятся.</p>
+                <div className="nav-group">
+                  {candidates.map((candidate) => (
+                    <button key={candidate.id} className="playlist-choice" onClick={() => void linkCatalog(candidate)}>
+                      <span><strong>{candidate.title}</strong><span>{candidate.artist_name}{candidate.album_title ? ` · ${candidate.album_title}` : ""}</span></span><Plus size={17} />
+                    </button>
+                  ))}
+                </div>
+                </>
+              ) : <p style={{ marginTop: 0, color: "var(--muted)" }}>Похожих на «{catalogTrack.title}» треков без файла в каталоге нет. Откройте нужный трек в <Link href="/music/catalog" style={{ color: "var(--accent)" }}>каталоге</Link> и привяжите файл там.</p>}
+            </div>
+          </div>
+        </div>
+      )}
       {playlistTrack && (
         <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setPlaylistTrack(null)}>
           <div className="modal" style={{ width: 430 }} role="dialog" aria-modal="true">

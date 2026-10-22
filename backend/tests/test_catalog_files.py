@@ -3,9 +3,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
-from mutagen.id3 import TIT2, TPE1, TSRC
+from mutagen.id3 import TALB, TIT2, TPE1, TSRC
 from mutagen.mp4 import MP4FreeForm
 from mutagen.wave import WAVE
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -16,7 +17,9 @@ from app.modules.music.scanner import jobs, scan_directory
 _counter = iter(range(1, 10_000))
 
 
-def make_wav(path: Path, *, title: str, artist: str, isrc: str | None = None, seconds: float = 2.0) -> Path:
+def make_wav(
+    path: Path, *, title: str, artist: str, isrc: str | None = None, album: str | None = None, seconds: float = 2.0
+) -> Path:
     frames = int(8000 * seconds)
     salt = next(_counter)
     with wave.open(str(path), "wb") as output:
@@ -30,6 +33,8 @@ def make_wav(path: Path, *, title: str, artist: str, isrc: str | None = None, se
     audio.tags.add(TPE1(encoding=3, text=[artist]))
     if isrc:
         audio.tags.add(TSRC(encoding=3, text=[isrc]))
+    if album:
+        audio.tags.add(TALB(encoding=3, text=[album]))
     audio.save()
     return path
 
@@ -85,6 +90,7 @@ def test_upload_into_catalog_track_ignores_differing_tags(
     body = response.json()
     assert body["status"] == "added"
     assert body["catalog_track"]["has_file"] is True
+    assert body["catalog_track"]["artwork_id"] == body["track"]["artwork_id"]
     assert body["track"]["title"] == "Track 01"
     stored = db.get(Track, body["track"]["id"])
     assert stored.catalog_track_id == card.id
@@ -108,6 +114,12 @@ def test_upload_into_catalog_track_ignores_differing_tags(
     without = authenticated_client.get("/api/music/transfer/tracks", params={"status": "without_file"}).json()
     assert [item["id"] for item in without["items"]] == [second_card.id]
     assert authenticated_client.get("/api/music/transfer/tracks", params={"q": "друг"}).json()["total"] == 1
+    second_card.enrich_status = "not_found"
+    db.commit()
+    found = authenticated_client.get("/api/music/transfer/tracks", params={"status": "enriched"}).json()
+    assert [item["id"] for item in found["items"]] == [card.id]
+    missing = authenticated_client.get("/api/music/transfer/tracks", params={"status": "not_found"}).json()
+    assert [item["id"] for item in missing["items"]] == [second_card.id]
 
 
 def test_upload_into_catalog_track_reuses_existing_unlinked_file(
@@ -218,6 +230,7 @@ def test_linked_track_exposes_catalog_data_without_touching_tags(
 ) -> None:
     card = add_card(db, "7001", "Искала", "Земфира", isrc="RUA119900001", duration_ms=215000)
     card.apple_url = "https://music.apple.com/ru/album/x/1?i=7001"
+    card.collection_id = "1"
     card.artwork_url = "https://is1-ssl.mzstatic.com/image/thumb/Music/a/100x100bb.jpg"
     db.commit()
     path = make_wav(tmp_path / "rip.wav", title="track01", artist="Unknown artist")
@@ -229,6 +242,9 @@ def test_linked_track_exposes_catalog_data_without_touching_tags(
     assert track["title"] == "track01"
     assert track["artist"]["name"] == "Unknown artist"
     assert track["artwork_id"] is None
+    # "Unknown artist" would need attention, but catalog data is what is shown for a linked file.
+    assert track["needs_attention"] is False
+    assert authenticated_client.get("/api/music/tracks/attention-summary").json() == {"total": 0}
     catalog = track["catalog"]
     assert (catalog["title"], catalog["artist_name"], catalog["album_title"]) == (
         "Искала",
@@ -237,6 +253,7 @@ def test_linked_track_exposes_catalog_data_without_touching_tags(
     )
     assert catalog["artwork_url"] == "https://is1-ssl.mzstatic.com/image/thumb/Music/a/600x600bb.jpg"
     assert catalog["apple_music_url"] == "https://music.apple.com/ru/album/x/1?i=7001"
+    assert catalog["collection_id"] == "1"
     assert (
         catalog["spotify_url"]
         == "https://open.spotify.com/search/%D0%97%D0%B5%D0%BC%D1%84%D0%B8%D1%80%D0%B0%20%D0%98%D1%81%D0%BA%D0%B0%D0%BB%D0%B0"
@@ -249,4 +266,181 @@ def test_linked_track_exposes_catalog_data_without_touching_tags(
     assert cards[card.id]["has_file"] is True and cards[card.id]["track_id"] == track_id
     assert cards[no_file.id]["has_file"] is False
     assert cards[no_file.id]["apple_music_url"] is None
+    assert cards[no_file.id]["collection_id"] is None
     assert cards[no_file.id]["spotify_url"].startswith("https://open.spotify.com/search/")
+
+
+def test_catalog_albums_group_by_album_title_and_lead_artist(
+    authenticated_client: TestClient, db: Session, tmp_path: Path
+) -> None:
+    lucky = add_card(db, "617154366", "Get Lucky", "Daft Punk, Pharrell Williams & Nile Rodgers")
+    crush = add_card(db, "617154362", "Instant Crush", "Daft Punk & Julian Casablancas")
+    # Two Apple editions of one album: different album ids, same title and artist.
+    dream = add_card(db, "8001", "Left Outside Alone", "Anastacia")
+    sick = add_card(db, "8002", "Sick and Tired", "Anastacia")
+    hits = add_card(db, "8003", "Greatest Hit", "Someone Else")
+    # A soundtrack: one Apple album, a different artist on every track.
+    shrek = [
+        add_card(db, f"810{index}", f"Song {index}", artist) for index, artist in enumerate(("Eels", "Smash Mouth"))
+    ]
+    add_card(db, "9001", "Искала", "Земфира")
+    for card, collection in ((lucky, "617154241"), (crush, "617154241"), (dream, "100"), (sick, "200")):
+        card.collection_id = collection
+    for card in (lucky, crush):
+        card.album_title = "Random Access Memories"
+        card.year = 2013
+        card.apple_url = f"https://music.apple.com/ru/album/ram/617154241?i={card.apple_track_id}"
+    for card in (dream, sick, hits):
+        card.album_title = "Pieces of a Dream"
+    for card in shrek:
+        card.album_title = "Shrek (Original Motion Picture Soundtrack)"
+        card.collection_id = "300"
+    db.commit()
+    path = make_wav(tmp_path / "lucky.wav", title="Get Lucky", artist="Daft Punk", album="RAM")
+    linked = authenticated_client.post(
+        f"/api/music/transfer/tracks/{lucky.id}/file", files={"file": (path.name, path.read_bytes(), "audio/wav")}
+    ).json()["track"]
+
+    albums = authenticated_client.get("/api/music/transfer/albums").json()
+    assert [(album["title"], album["artist_name"], album["track_count"]) for album in albums] == [
+        ("Pieces of a Dream", "Anastacia", 2),
+        ("Random Access Memories", "Daft Punk", 2),
+        ("Pieces of a Dream", "Someone Else", 1),
+        ("Искала - Single", "Земфира", 1),
+        ("Shrek (Original Motion Picture Soundtrack)", "Разные исполнители", 2),
+    ]
+    ram = albums[1]
+    assert (ram["key"], ram["with_file"], ram["year"]) == ("random access memories|daft punk", 1, 2013)
+    assert ram["apple_music_url"] == "https://music.apple.com/ru/album/ram/617154241"
+    assert ram["local_album_ids"] == [linked["album"]["id"]]
+
+    detail = authenticated_client.get("/api/music/transfer/album", params={"key": albums[0]["key"]}).json()
+    assert [track["title"] for track in detail["tracks"]] == ["Left Outside Alone", "Sick and Tired"]
+    assert {track["album_key"] for track in detail["tracks"]} == {albums[0]["key"]}
+    assert authenticated_client.get("/api/music/transfer/album", params={"key": "nope"}).status_code == 404
+
+    without = authenticated_client.get("/api/music/transfer/albums", params={"status": "without_file"}).json()
+    assert [(album["title"], album["track_count"]) for album in without][:2] == [
+        ("Pieces of a Dream", 2),
+        ("Random Access Memories", 1),
+    ]
+    searched = authenticated_client.get("/api/music/transfer/albums", params={"q": "иск"}).json()
+    assert [album["key"] for album in searched] == [albums[3]["key"]]
+    # Any track's album key opens the whole album.
+    smash = authenticated_client.get(f"/api/music/transfer/tracks/{shrek[1].id}").json()["album_key"]
+    soundtrack = authenticated_client.get("/api/music/transfer/album", params={"key": smash}).json()
+    assert [track["artist_name"] for track in soundtrack["tracks"]] == ["Eels", "Smash Mouth"]
+
+
+def test_catalog_artists_group_by_lead_artist_and_cover_fully_linked_files(
+    authenticated_client: TestClient, db: Session, tmp_path: Path
+) -> None:
+    lucky = add_card(db, "617154366", "Get Lucky", "Daft Punk, Pharrell Williams & Nile Rodgers")
+    crush = add_card(db, "617154362", "Instant Crush", "Daft Punk & Julian Casablancas")
+    add_card(db, "9001", "Искала", "Земфира")
+    for card in (lucky, crush):
+        card.album_title = "Random Access Memories"
+    db.commit()
+    path = make_wav(tmp_path / "lucky.wav", title="Get Lucky", artist="Daft Punk", album="RAM")
+    linked = authenticated_client.post(
+        f"/api/music/transfer/tracks/{lucky.id}/file", files={"file": (path.name, path.read_bytes(), "audio/wav")}
+    ).json()["track"]
+
+    artists = authenticated_client.get("/api/music/transfer/artists").json()
+    assert [
+        (artist["name"], artist["track_count"], artist["album_count"], artist["with_file"]) for artist in artists
+    ] == [
+        ("Daft Punk", 2, 1, 1),
+        ("Земфира", 1, 1, 0),
+    ]
+    assert artists[0]["local_artist_ids"] == [linked["artist"]["id"]]
+    track = authenticated_client.get(f"/api/music/transfer/tracks/{crush.id}").json()
+    assert track["artist_key"] == artists[0]["key"] == "daft punk"
+
+    detail = authenticated_client.get("/api/music/transfer/artist", params={"key": "daft punk"}).json()
+    assert [item["title"] for item in detail["tracks"]] == ["Get Lucky", "Instant Crush"]
+    assert [(album["title"], album["artist_key"]) for album in detail["albums"]] == [
+        ("Random Access Memories", "daft punk")
+    ]
+    assert authenticated_client.get("/api/music/transfer/artist", params={"key": "nobody"}).status_code == 404
+
+    # A library artist with a file outside the catalog keeps its own card.
+    upload_files(authenticated_client, make_wav(tmp_path / "other.wav", title="Other Song", artist="Daft Punk"))
+    artists = authenticated_client.get("/api/music/transfer/artists").json()
+    assert artists[0]["local_artist_ids"] == []
+
+
+def test_catalog_genres_are_backfilled_and_merged_with_library_files(
+    authenticated_client: TestClient, db: Session, tmp_path: Path
+) -> None:
+    from app.modules.music.transfer.worker import TransferWorker
+
+    card = add_card(db, "7001", "Искала", "Земфира")
+    other = add_card(db, "7002", "Хочешь?", "Земфира")
+    for item in (card, other):
+        item.storefront = "ru"
+    db.commit()
+
+    class GenreLookup:
+        def __init__(self) -> None:
+            self.calls: list[tuple[list[str], str]] = []
+
+        def lookup(self, track_ids: list[str], country: str) -> dict[str, dict]:
+            self.calls.append((list(track_ids), country))
+            return {"7001": {"trackId": 7001, "primaryGenreName": "Рок"}}
+
+        def search(self, term: str, country: str) -> list[dict]:
+            return []
+
+    fake = GenreLookup()
+    TransferWorker(client=fake, sleep=lambda _: None).run()
+    assert [(sorted(ids), country) for ids, country in fake.calls] == [(["7001", "7002"], "ru")]
+    db.expire_all()
+    assert (db.get(CatalogTrack, card.id).genre, db.get(CatalogTrack, other.id).genre) == ("Рок", "")
+    TransferWorker(client=fake, sleep=lambda _: None).run()
+    assert len(fake.calls) == 1
+
+    # A library file outside the catalog keeps its own genre; a linked file is counted through the catalog.
+    rock = make_wav(tmp_path / "rock.wav", title="Local Song", artist="Local Band", album="Local")
+    upload_files(authenticated_client, rock)
+    track = db.scalar(select(Track).where(Track.title == "Local Song"))
+    track.genre = "рок"
+    db.commit()
+
+    genres = authenticated_client.get("/api/music/transfer/genres").json()
+    assert genres == [{"name": "Рок", "track_count": 2, "album_count": 2, "catalog_count": 1}]
+    listed = authenticated_client.get("/api/music/transfer/tracks", params={"genre": "Рок"}).json()
+    assert [item["title"] for item in listed["items"]] == ["Искала"]
+    assert listed["items"][0]["genre"] == "Рок"
+
+
+def test_search_ignores_case_in_cyrillic_and_covers_the_catalog(
+    authenticated_client: TestClient, db: Session, tmp_path: Path
+) -> None:
+    pushkin = add_card(db, "7101", "Песня Александра", "Александр Пушкин")
+    rock = add_card(db, "7102", "Другая", "Александр Пушкин & Гость")
+    other = add_card(db, "7103", "Александрия", "Кто-то")
+    for card in (pushkin, rock):
+        card.album_title = "Стихи"
+    other.album_title = "Город"
+    add_card(db, "7104", "Совсем другое", "Никто")
+    upload_files(authenticated_client, make_wav(tmp_path / "f.wav", title="Шёпот", artist="Файловый Исполнитель"))
+
+    found = authenticated_client.get("/api/music/transfer/search", params={"q": "александр"}).json()
+    assert found["tracks_total"] == 3
+    # Title matches come first, then tracks of the artist.
+    assert [item["title"] for item in found["tracks"]] == ["Александрия", "Другая", "Песня Александра"]
+    assert [artist["name"] for artist in found["artists"]] == ["Александр Пушкин"]
+    assert found["artists"][0]["track_count"] == 2
+    assert [(album["title"], album["track_count"]) for album in found["albums"]] == [("Стихи", 2)]
+    assert authenticated_client.get("/api/music/transfer/search", params={"q": "   "}).json()["tracks"] == []
+
+    # Library search, "All tracks" and the catalog filter ignore case in Cyrillic too.
+    local = authenticated_client.get("/api/music/search", params={"q": "шЁпот"}).json()
+    assert [track["title"] for track in local["tracks"]] == ["Шёпот"]
+    assert authenticated_client.get("/api/music/search", params={"q": "файловый"}).json()["artists"][0]["name"] == (
+        "Файловый Исполнитель"
+    )
+    assert authenticated_client.get("/api/music/tracks", params={"q": "ШЁПОТ"}).json()["total"] == 1
+    assert authenticated_client.get("/api/music/transfer/tracks", params={"q": "стихи"}).json()["total"] == 2
+    assert authenticated_client.get("/api/music/transfer/tracks", params={"q": "100%"}).json()["total"] == 0
