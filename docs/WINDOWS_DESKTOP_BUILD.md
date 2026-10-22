@@ -114,7 +114,7 @@ $env:MLIB_PYTHON = "C:\Python312\python.exe"
 Результат:
 
 ```text
-dist\mLib-Setup-0.0.4-alpha-x64.exe
+dist\mLib-Setup-0.0.5-alpha-x64.exe
 ```
 
 Установщик ставит GUI-приложение в стандартный Program Files, создаёт ярлыки меню «Пуск» и рабочего стола и регистрирует uninstall. `deleteAppDataOnUninstall=false`, поэтому `%LOCALAPPDATA%\mLib` не удаляется. Повторная установка находит старую библиотеку и применяет только недостающие migrations.

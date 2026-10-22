@@ -12,6 +12,33 @@ export type ReleaseAnnouncement = {
 };
 
 const announcements: Record<string, ReleaseAnnouncement> = {
+  "0.0.5-alpha": {
+    version: "0.0.5-alpha",
+    title: "Что нового в mLib",
+    intro: "В этой версии музыку можно перенести из других сервисов и собрать в каталог в духе Apple Music.",
+    notes: [
+      {
+        icon: "motion",
+        title: "Перенос фонотеки",
+        description: "Загрузите экспорт Apple Music или TuneMyMusic — треки, альбомы и плейлисты появятся в каталоге.",
+      },
+      {
+        icon: "brand",
+        title: "Каталог musicLib",
+        description: "Обложки, альбомы, исполнители и жанры каталога; файл можно перетащить прямо на карточку трека.",
+      },
+      {
+        icon: "eye",
+        title: "Поиск по мере ввода",
+        description: "Поиск в шапке находит исполнителей, треки и альбомы без Enter и не путается в регистре кириллицы.",
+      },
+      {
+        icon: "shield",
+        title: "Аккуратнее на любом экране",
+        description: "Анимации на главных экранах больше не обрезаются, а кнопки на телефоне не теряют подписи.",
+      },
+    ],
+  },
   "0.0.4-alpha": {
     version: "0.0.4-alpha",
     title: "Что нового в mLib",
