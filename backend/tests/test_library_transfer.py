@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.security import utcnow
 from app.modules.music.models import CatalogTrack, TransferJob
 from app.modules.music.transfer import worker as transfer_worker
@@ -270,6 +271,44 @@ def test_transfer_survives_lookup_failures(authenticated_client: TestClient, db:
     assert status["status"] == "completed"
     assert status["errors"] == 1
     assert db.scalar(select(CatalogTrack.enrich_status).where(CatalogTrack.apple_track_id == "1010")) == "error"
+
+
+def test_transfer_with_lookup_disabled_counts_every_track_as_error(authenticated_client: TestClient) -> None:
+    job_id = upload(authenticated_client).json()["id"]
+    fake = FakeLookup(DEFAULT_CATALOG)
+    settings = get_settings().model_copy(update={"itunes_lookup_enabled": False})
+    TransferWorker(client=fake, settings=settings, sleep=lambda _: None).run()
+
+    assert fake.calls == []
+    status = authenticated_client.get(f"/api/music/transfer/{job_id}").json()
+    assert status["status"] == "completed"
+    assert status["error_message"] == "Поиск в Apple Music отключён в настройках сервера"
+    assert (status["enriched"], status["not_found"], status["pending"]) == (0, 0, 0)
+    # One invalid row plus the four tracks that were never looked up.
+    assert status["errors"] == 5
+
+
+def test_transfer_counters_follow_each_batch(
+    authenticated_client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job_id = upload(authenticated_client).json()["id"]
+    monkeypatch.setattr(transfer_worker, "LOOKUP_BATCH_SIZE", 2)
+    seen: list[tuple[int, int]] = []
+
+    class RecordingLookup(FakeLookup):
+        def lookup(self, track_ids: list[str], country: str) -> dict[str, dict]:
+            if country == "ru":
+                db.expire_all()
+                enriched = db.query(CatalogTrack).filter_by(enrich_status="enriched").count()
+                seen.append((db.get(TransferJob, job_id).enriched, enriched))
+            return super().lookup(track_ids, country)
+
+    run_worker(RecordingLookup(DEFAULT_CATALOG))
+    # Whatever the first batch held, its finds are counted before the second batch starts
+    # (1004 is missing everywhere, so any two tracks yield at least one find).
+    assert len(seen) == 2
+    assert seen[0] == (0, 0)
+    assert seen[1][0] == seen[1][1] > 0
 
 
 def test_transfer_requires_admin_for_changes(client: TestClient) -> None:

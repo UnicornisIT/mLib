@@ -99,6 +99,8 @@ def import_playlists(
 
 
 def refresh_counters(db: Session, job: TransferJob) -> None:
+    # Music sessions do not autoflush: without this the count misses statuses set just before.
+    db.flush()
     rows = db.execute(
         select(CatalogTrack.enrich_status, func.count(CatalogTrack.id))
         .where(CatalogTrack.transfer_job_id == job.id)
