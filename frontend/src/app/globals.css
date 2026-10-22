@@ -367,7 +367,18 @@ a { color: inherit; text-decoration: none; }
 .hero-main::after { content: ""; position: absolute; width: 220px; height: 220px; right: -50px; top: -50px; border: 52px solid var(--accent-soft); border-radius: 50%; opacity: .85; }
 .hero-main h1 { max-width: 710px; margin: 0; font-size: clamp(35px, 5vw, 64px); line-height: .98; letter-spacing: -.065em; position: relative; z-index: 1; }
 .hero-main p { max-width: 540px; margin: 18px 0 0; color: var(--muted); line-height: 1.6; position: relative; z-index: 1; }
+.hero-main .eyebrow { position: relative; z-index: 1; }
 .hero-side { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* The sidebar eats into the viewport, so the hero stacks by its own width, not the window's. */
+.music-page { container: music-page / inline-size; }
+@container music-page (max-width: 820px) {
+  .hero { grid-template-columns: minmax(0, 1fr); }
+  .hero .hero-side { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .hero .stat-card { min-height: 100px; }
+}
+@container music-page (max-width: 520px) {
+  .hero .hero-side { grid-template-columns: 1fr 1fr; }
+}
 .stat-card { min-height: 120px; display: flex; flex-direction: column; justify-content: space-between; padding: 18px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); }
 .stat-card svg { color: var(--accent); }
 .stat-value { font-size: 28px; line-height: 1; letter-spacing: -.05em; font-weight: 740; }
@@ -626,7 +637,7 @@ a { color: inherit; text-decoration: none; }
 .movie-library-nav nav a:hover { color: var(--movie-text); background: var(--movie-surface-2); }
 .movie-add-button { grid-column: 3; justify-self: end; color: var(--movie-text); border-color: var(--movie-line); background: var(--movie-surface); }
 .movie-library-page > .service-page-content { width: min(1400px, 100%); margin: 0 auto; padding: 0 clamp(22px, 4vw, 64px); }
-.movie-library-hero { position: relative; min-height: 520px; display: flex; align-items: center; overflow: hidden; margin-top: 36px; padding: clamp(38px, 7vw, 88px); border: 1px solid var(--movie-line); border-radius: 30px; background: radial-gradient(circle at 78% 25%, rgb(230 173 73 / 14%), transparent 25%), linear-gradient(135deg, #1a1c18, #11120f 66%); }
+.movie-library-hero { position: relative; min-height: 520px; display: flex; align-items: center; overflow: hidden; margin-top: 36px; padding: clamp(38px, 7vw, 88px); padding-bottom: 136px; /* keeps the copy clear of .movie-stats */ border: 1px solid var(--movie-line); border-radius: 30px; background: radial-gradient(circle at 78% 25%, rgb(230 173 73 / 14%), transparent 25%), linear-gradient(135deg, #1a1c18, #11120f 66%); }
 .movie-library-hero::before { content: ""; position: absolute; inset: 0; opacity: .2; background-image: linear-gradient(90deg, transparent 49.5%, rgb(255 255 255 / 6%) 50%, transparent 50.5%), linear-gradient(transparent 49.5%, rgb(255 255 255 / 5%) 50%, transparent 50.5%); background-size: 72px 72px; mask-image: linear-gradient(90deg, transparent, black); }
 .movie-library-hero.empty { min-height: 570px; }
 .movie-hero-copy { position: relative; z-index: 2; width: min(650px, 58%); }
@@ -637,13 +648,14 @@ a { color: inherit; text-decoration: none; }
 .movie-primary { color: #171814 !important; border-color: var(--movie-gold) !important; background: var(--movie-gold) !important; }
 .movie-primary:hover { background: #f1be60 !important; }
 .movie-secondary { color: var(--movie-text); border-color: var(--movie-line); background: var(--movie-surface); }
-.movie-hero-art { position: absolute; z-index: 1; inset: 0 0 0 55%; overflow: hidden; }
-.movie-hero-frame { position: absolute; width: 310px; aspect-ratio: 1.52; padding: 16px; border: 1px solid rgb(255 255 255 / 20%); border-radius: 13px; background: #2b2e28; box-shadow: 0 30px 65px rgb(0 0 0 / 35%); }
+/* No clipping here: frames are sized and placed so their rotated, floating corners stay inside the hero. */
+.movie-hero-art { position: absolute; z-index: 1; inset: 0 0 0 55%; }
+.movie-hero-frame { position: absolute; width: min(310px, 70%); aspect-ratio: 1.52; padding: 16px; border: 1px solid rgb(255 255 255 / 20%); border-radius: 13px; background: #2b2e28; box-shadow: 0 30px 65px rgb(0 0 0 / 35%); }
 .movie-hero-frame::before, .movie-hero-frame::after { content: ""; position: absolute; inset: 5px 11px auto; height: 5px; background: repeating-linear-gradient(90deg, transparent 0 8px, rgb(255 255 255 / 26%) 8px 14px); }
 .movie-hero-frame::after { inset: auto 11px 5px; }
 .movie-hero-frame span { display: block; width: 100%; height: 100%; border-radius: 7px; background: linear-gradient(145deg, #50544a, #252721); }
-.movie-hero-frame.frame-a { right: 2%; top: 9%; transform: rotate(8deg); }
-.movie-hero-frame.frame-b { left: 2%; bottom: 4%; transform: rotate(-10deg); }
+.movie-hero-frame.frame-a { right: 6%; top: max(9%, 36px); transform: rotate(8deg); }
+.movie-hero-frame.frame-b { left: 6%; bottom: max(7%, 40px); transform: rotate(-10deg); }
 .movie-hero-disc { position: absolute; z-index: 2; right: 19%; top: 29%; width: 205px; height: 205px; border: 10px solid #dedbd0; border-radius: 50%; background: #343731; box-shadow: 0 30px 55px rgb(0 0 0 / 44%); }
 .movie-hero-disc i { position: absolute; width: 51px; height: 51px; border-radius: 50%; background: #141512; }
 .movie-hero-disc i:nth-child(1) { left: 67px; top: 15px; }.movie-hero-disc i:nth-child(2) { right: 16px; top: 68px; }.movie-hero-disc i:nth-child(3) { left: 68px; bottom: 15px; }.movie-hero-disc i:nth-child(4) { left: 15px; top: 68px; }
@@ -1106,14 +1118,16 @@ a { color: inherit; text-decoration: none; }
 .books-hero-copy h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(54px, 7vw, 90px); font-weight: 500; line-height: .88; letter-spacing: -.06em; }
 .books-hero-copy p { max-width: 570px; margin: 24px 0 27px; color: var(--book-muted); font-size: 14px; line-height: 1.65; }
 .books-hero-art { position: absolute; inset: 8% 1% 15% 54%; }
-.hero-book { position: absolute; overflow: hidden; border-radius: 4px 12px 12px 4px; box-shadow: -18px 25px 40px rgb(72 42 30 / 18%); transform-origin: bottom center; }
+.hero-book { position: absolute; overflow: hidden; container-type: inline-size; border-radius: 4px 12px 12px 4px; box-shadow: -18px 25px 40px rgb(72 42 30 / 18%); transform-origin: bottom center; }
 .hero-book::after { content: ""; position: absolute; inset: 0 auto 0 7%; width: 1px; background: rgb(255 255 255 / 25%); box-shadow: 4px 0 9px rgb(0 0 0 / 12%); }
 .hero-book i { position: absolute; inset: 8% 8% auto; height: 1px; background: rgb(255 255 255 / 45%); }
-.hero-book span { position: absolute; left: 16%; bottom: 14%; color: #f9ebd6; font: 13px/1.2 ui-sans-serif, sans-serif; letter-spacing: .12em; }
-.hero-book span strong { font-size: 20px; letter-spacing: .04em; }
-.hero-book-one { left: 7%; top: 7%; width: 190px; aspect-ratio: .67; background: #315b4c; transform: rotate(-10deg); }
-.hero-book-two { left: 37%; top: -2%; width: 205px; aspect-ratio: .67; background: #843e43; transform: rotate(7deg); }
-.hero-book-three { left: 61%; top: 31%; width: 172px; aspect-ratio: .72; display: grid; place-items: center; color: #664029; background: #d7ad77; transform: rotate(13deg); }
+.hero-book span { position: absolute; left: 16%; bottom: 14%; color: #f9ebd6; font: min(13px, 6.4cqi)/1.2 ui-sans-serif, sans-serif; letter-spacing: .12em; }
+/* The cover title scales with the cover, so a narrow book never cuts it off. */
+.hero-book span strong { font-size: min(20px, 9.8cqi); letter-spacing: .04em; }
+/* Widths follow the art box (capped at the design size) so rotated, floating books never leave the hero. */
+.hero-book-one { left: 7%; top: max(7%, 26px); width: min(190px, 30%); aspect-ratio: .67; background: #315b4c; transform: rotate(-10deg); }
+.hero-book-two { left: 37%; top: -2%; width: min(205px, 32%); aspect-ratio: .67; background: #843e43; transform: rotate(7deg); }
+.hero-book-three { left: 61%; top: 31%; width: min(172px, 27%); aspect-ratio: .72; display: grid; place-items: center; color: #664029; background: #d7ad77; transform: rotate(13deg); }
 .books-stats { position: absolute; z-index: 3; inset: auto clamp(28px, 5vw, 68px) 27px; display: flex; align-items: center; gap: 0; padding-top: 21px; border-top: 1px solid var(--book-line); }
 .books-stats > span { min-width: 150px; display: grid; grid-template-columns: 24px auto; align-items: center; column-gap: 7px; padding-right: 28px; }
 .books-stats svg { grid-row: 1 / 3; color: var(--book-wine); }
@@ -1232,7 +1246,7 @@ a { color: inherit; text-decoration: none; }
 
 @media (max-width: 780px) {
   .books-nav { grid-template-columns: 1fr auto; }.books-nav nav { display: none; }.books-add { grid-column: 2; }
-  .books-hero { min-height: 600px; align-items: flex-end; padding-bottom: 120px; }.books-hero-copy { width: 100%; }.books-hero-art { inset: 0 0 44% 26%; opacity: .75; }
+  .books-hero { min-height: 600px; align-items: flex-end; padding-bottom: 120px; }.books-hero-copy { width: 100%; }.books-hero-art { inset: 0 0 44% 26%; opacity: .75; }.hero-book-two { top: 14px; }
   .books-stats { display: grid; grid-template-columns: 1fr 1fr; row-gap: 13px; }.books-stats > span { min-width: 0; }
   .book-detail-modal { grid-template-columns: 190px minmax(0, 1fr); }.book-detail-cover { min-height: 520px; }.book-detail-copy { padding: 35px 28px; }
   .book-upload-grid { grid-template-columns: 170px minmax(0, 1fr); }
@@ -1241,7 +1255,7 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 640px) {
   .service-grid { grid-template-columns: 1fr; }.books-service-card { grid-column: auto; min-height: 390px; }.books-card-art { width: 60%; height: 52%; }
   .books-page { min-height: calc(100vh - 66px); padding-bottom: 55px; }.books-nav { top: 66px; min-height: 56px; padding-inline: 14px; }.books-add { width: 38px; min-width: 38px; padding: 0; font-size: 0; }
-  .books-page > .service-page-content { padding-inline: 14px; }.books-hero { min-height: 610px; margin-top: 18px; padding: 30px 23px 114px; border-radius: 22px; }.books-hero-copy h1 { font-size: 53px; }.books-hero-copy p { font-size: 12px; }.books-hero-art { inset: 1% 0 49% 17%; overflow: hidden; }.hero-book-one { width: 150px; }.hero-book-two { width: 160px; }.hero-book-three { left: 47%; width: 115px; }
+  .books-page > .service-page-content { padding-inline: 14px; }.books-hero { min-height: 610px; margin-top: 18px; padding: 30px 23px 114px; border-radius: 22px; }.books-hero-copy h1 { font-size: 53px; }.books-hero-copy p { font-size: 12px; }.books-hero-art { inset: 1% 0 49% 17%; }.hero-book-one { left: 6%; width: min(150px, 38%); }.hero-book-two { left: 33%; width: min(160px, 40%); }.hero-book-three { left: 54%; width: min(115px, 30%); }
   .books-stats { left: 22px; right: 22px; bottom: 19px; }.books-stats > span { grid-template-columns: 20px auto; padding-right: 8px; }.books-stats strong { font-size: 17px; }
   .books-section { padding-top: 54px; }.books-section-heading h2 { font-size: 36px; }.books-toolbar { grid-template-columns: 1fr; align-items: stretch; }.books-filters { overflow-x: auto; }.books-filters button { flex: 0 0 auto; }.books-search, .books-sort { border-left: 0; border-top: 1px solid var(--book-line); }.books-sort select { flex: 1; }
   .books-grid, .books-recent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 29px 12px; }.book-card-copy strong { font-size: 14px; }.book-card-meta > span:last-child { display: none; }
@@ -1289,11 +1303,12 @@ a { color: inherit; text-decoration: none; }
 .collect-hero-copy h1 { margin: 13px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(48px, 6.5vw, 82px); font-weight: 500; line-height: .93; letter-spacing: -.055em; }
 .collect-hero-copy p { max-width: 530px; margin: 22px 0 27px; color: var(--collect-muted); font-size: 13px; line-height: 1.7; }
 .collect-hero-art { position: absolute; z-index: 1; inset: 7% 2% 16% 54%; }
-.collect-hero-art i { position: absolute; z-index: 2; width: 160px; aspect-ratio: 1; display: grid; place-items: center; color: #f5eadc; border: 10px solid #d8b58e; border-radius: 16px; background: #7f4b35; box-shadow: 0 28px 50px rgb(56 35 21 / 24%); }
+/* Same rule as the book hero: sizes follow the art box so rotated, floating items stay inside. */
+.collect-hero-art i { position: absolute; z-index: 2; width: min(160px, 26%); aspect-ratio: 1; display: grid; place-items: center; color: #f5eadc; border: 10px solid #d8b58e; border-radius: 16px; background: #7f4b35; box-shadow: 0 28px 50px rgb(56 35 21 / 24%); }
 .collect-hero-art i svg { width: 42px; height: 42px; opacity: .8; }
 .collect-hero-art i:nth-child(1) { left: 5%; top: 4%; transform: rotate(-11deg); background: #4f6e68; }
-.collect-hero-art i:nth-child(2) { left: 35%; top: 27%; width: 185px; transform: rotate(5deg); background: #89543b; }
-.collect-hero-art i:nth-child(3) { right: 0; top: 2%; width: 135px; transform: rotate(13deg); background: #526783; }
+.collect-hero-art i:nth-child(2) { left: 35%; top: 27%; width: min(185px, 30%); transform: rotate(5deg); background: #89543b; }
+.collect-hero-art i:nth-child(3) { right: 5%; top: max(2%, 16px); width: min(135px, 22%); transform: rotate(13deg); background: #526783; }
 .collect-hero-art span { position: absolute; left: 13%; right: -5%; bottom: 4%; height: 32%; border-radius: 50%; background: rgb(100 68 45 / 13%); filter: blur(12px); transform: skewX(-13deg); }
 .collect-stats { position: absolute; z-index: 4; inset: auto clamp(36px, 6vw, 76px) 28px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; padding-top: 21px; border-top: 1px solid var(--collect-line); }
 .collect-stats > span { display: grid; grid-template-columns: 26px auto; align-items: center; column-gap: 7px; }.collect-stats svg { width: 18px; grid-row: 1 / 3; color: var(--collect-accent); }.collect-stats strong { font-family: Georgia, serif; font-size: 21px; font-weight: 500; line-height: 1; }.collect-stats small { margin-top: 3px; color: var(--collect-muted); font-size: 9px; }
@@ -1365,7 +1380,7 @@ a { color: inherit; text-decoration: none; }
   .collect-bulk-bar { left: 9px; right: 9px; bottom: 9px; overflow-x: auto; transform: none; }.collect-bulk-bar > span { position: sticky; left: 0; padding-right: 5px; background: #2d2925; }
 }
 @media (max-width: 480px) {
-  .collect-hero-art { inset: 2% 3% 55% 14%; }.collect-hero-art i { width: 125px; }.collect-hero-art i:nth-child(2) { width: 145px; }.collect-hero-art i:nth-child(3) { width: 108px; }
+  .collect-hero-art { inset: 2% 3% 55% 14%; }.collect-hero-art i { width: min(125px, 34%); }.collect-hero-art i:nth-child(2) { width: min(145px, 40%); }.collect-hero-art i:nth-child(3) { width: min(108px, 30%); }
   .collect-collection-pills > button { min-width: 165px; }.collect-section-heading h2 { font-size: 36px; }.collect-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.collect-card-poster { border-radius: 10px; }.collect-card-copy > span:not(.collect-location), .collect-card-tags { display: none; }
   .collect-item-fields, .collect-dynamic-fields > div { grid-template-columns: 1fr; }.collect-item-fields .collect-wide, .collect-dynamic-fields .collect-wide { grid-column: auto; }.collect-photo-previews { grid-template-columns: repeat(4, 1fr); }.collect-modal-header { padding: 17px 18px; }.collect-modal-footer { padding: 13px 18px; }.collect-item-fields, .collect-photo-picker, .collect-modal-body { padding: 18px; }
   .collect-detail-gallery { min-height: 330px; padding: 9px; }.collect-detail-main-photo { min-height: 290px; }.collect-detail-copy h2 { font-size: 40px; }.collect-detail-facts { grid-template-columns: 1fr; }.collect-detail-facts > span:first-child { grid-column: auto; }.collect-detail-actions .button { flex: 1; }

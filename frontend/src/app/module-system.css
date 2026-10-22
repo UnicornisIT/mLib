@@ -36,6 +36,10 @@
   letter-spacing: -.06em;
 }
 
+/* The music hero shares its row with stat cards, so the headline follows its own column. */
+.music-page .hero-main { container-type: inline-size; }
+.music-page .hero-main h1 { font-size: min(var(--module-type-hero), 15cqi); }
+
 :is(
   .music-page .hero-main > p,
   .movie-hero-copy > p,
@@ -78,6 +82,32 @@
 :is(.game-primary-button, .game-secondary-button, .game-edit-button, .game-delete, .wish-primary, .wish-secondary, .wish-delete) {
   min-height: 44px;
   font-size: var(--module-type-control);
+}
+
+/*
+ * Buttons that collapse to an icon on narrow screens: the control size above (and the wishes
+ * readability pass) outrank each module's own `font-size: 0; padding: 0`, which squeezed the
+ * label, or with wishes the icon itself, into a 38px button. Same breakpoints as the modules.
+ */
+@media (max-width: 760px) {
+  :is(.collect-page, .wishes-page) :is(.collect-nav > .button, .wishes-add) { padding: 0; font-size: 0; }
+}
+
+@media (max-width: 680px) {
+  .games-page .games-add { padding: 0; font-size: 0; }
+}
+
+@media (max-width: 640px) {
+  :is(.movie-library-page, .books-page) :is(.movie-add-button, .books-add),
+  .movie-add-button { padding: 0; font-size: 0; }
+}
+
+@media (max-width: 450px) {
+  .wish-delete { padding: 0; font-size: 0; }
+}
+
+@media (max-width: 420px) {
+  .game-delete { padding: 0; font-size: 0; }
 }
 
 /* Statistics */
@@ -250,10 +280,12 @@
   50% { scale: 1.07; opacity: 1; }
 }
 
-.music-page .hero .hero-side,
-.games-hero-console,
-.games-featured,
-.wishes-hero-orbit {
+/*
+ * Only decoration moves. Data (music stat cards) and controls (the featured game is a button)
+ * stay put, and a group never floats as a whole while its parts float too (wishes orbit).
+ */
+.music-page .hero-main::after,
+.games-hero-console {
   animation: module-hero-float 6s ease-in-out infinite;
   will-change: translate;
 }
@@ -309,15 +341,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .music-page .hero .hero-side,
+  .music-page .hero-main::after,
   .movie-hero-frame,
   .movie-hero-disc,
   .books-hero-art .hero-book,
   .collect-hero-art i,
   .games-hero-console,
-  .games-featured,
   .games-hero-console > svg,
-  .wishes-hero-orbit,
   .wishes-hero-orbit > svg,
   .wishes-hero-orbit i {
     animation: none;
